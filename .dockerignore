@@ -1,7 +1,0 @@
-node_modules
-.venv
-*.db
-uploads
-.env
-dist
-.git
