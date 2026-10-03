@@ -23,7 +23,10 @@ export const CATEGORY_LABELS: Record<FileCategory, string> = {
 /** Categories a field user can read and upload (spec §3.1). The rest can carry prices. */
 export const FIELD_CATEGORIES = ["photo", "measurement_report", "permit", "other"] as const satisfies readonly FileCategory[];
 
-/** Accepted types and the extension the server gives each stored object. */
+/**
+ * Accepted types and the extension the server gives each stored object. Keep in step with
+ * `private.allowed_file_types()` (the bucket's allow-list). SVG is deliberately absent: it can carry script.
+ */
 const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",

@@ -31,7 +31,7 @@ export const registerFilesSchema = uploadTargetSchema.and(
           id: uuid,
           storagePath: z.string().min(1).max(300),
           name: z.string().trim().min(1).max(255),
-          type: z.string().min(1).max(100),
+          type: z.string().refine((t) => extensionFor(t) !== null),
           size: z.number().int().positive().max(MAX_FILE_BYTES),
           category: z.enum(CATEGORY_ORDER),
         }),

@@ -39,7 +39,7 @@ async function put(slot: UploadSlot, type = "image/png") {
 }
 
 const photos = (count: number) => Array.from({ length: count }, (_, i) => ({ name: `roof-${i + 1}.png`, type: "image/png", size: PNG.length }));
-const toRegister = (uploads: UploadSlot[], category: "photo" | "estimate" | "measurement_report" = "photo", type = "image/png") =>
+const toRegister = (uploads: UploadSlot[], category: "photo" | "estimate" | "measurement_report" | "other" = "photo", type = "image/png") =>
   uploads.map((u, i) => ({ id: u.id, storagePath: u.storagePath, name: `roof-${i + 1}.png`, type, size: PNG.length, category }));
 const activityCount = async (opportunityId: string) =>
   (await service.from("activities").select("summary").eq("opportunity_id", opportunityId).eq("type", "files_uploaded")).data!;
@@ -141,6 +141,41 @@ describe("register_files", () => {
     expect(direct.error?.code).toBe(PERMISSION_DENIED);
 
     expect(await registerUploadedFiles(sales, { opportunityId: dealId, files: toRegister([slot!]) })).toEqual({ ok: true, data: { count: 1 } });
+  });
+});
+
+describe("content types", () => {
+  it("only photos and PDFs can be stored, and a file is recorded with the type storage serves", async () => {
+    // Not offered an upload URL at all
+    for (const type of ["image/svg+xml", "text/html", "application/zip"]) {
+      expect(await createUploadSlots(sales, { opportunityId: dealId, files: [{ name: "x", type, size: 10 }] })).toMatchObject({ ok: false, error: { code: "invalid" } });
+    }
+
+    // Storage refuses other content, even on a validly signed URL
+    const slots = await createUploadSlots(sales, { opportunityId: dealId, files: photos(2) });
+    if (!slots.ok) throw new Error(slots.error.message);
+    const [first, second] = slots.data.uploads;
+    for (const type of ["text/html", "image/svg+xml"]) {
+      const body = new FormData();
+      body.append("cacheControl", "3600");
+      body.append("", new Blob(["<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"], { type }));
+      expect((await fetch(first!.signedUrl, { method: "PUT", body })).ok).toBe(false);
+    }
+    expect((await service.storage.from(BUCKET).exists(first!.storagePath)).data).toBe(false);
+
+    // A stored PDF cannot be registered as a photo (or anything else it is not)
+    await put(second!, "application/pdf");
+    expect(await registerUploadedFiles(sales, { opportunityId: dealId, files: toRegister([second!]) })).toMatchObject({ ok: false, error: { code: "invalid" } });
+    const p = { opportunity_id: dealId, files: [{ id: second!.id, storage_path: second!.storagePath, file_name: "x.svg", mime_type: "image/svg+xml", size_bytes: 10 }] } as Json;
+    expect((await sales.supabase.rpc("register_files", { p })).data).toMatchObject({ ok: false, code: "invalid" });
+    expect((await service.from("files").select("id").eq("id", second!.id)).data).toEqual([]);
+
+    // Recorded size comes from storage, not from the caller
+    const honest = await registerUploadedFiles(sales, { opportunityId: dealId, files: [{ ...toRegister([second!], "photo", "application/pdf")[0]!, category: "other" as const, size: 999_999 }] });
+    expect(honest).toEqual({ ok: true, data: { count: 1 } });
+    expect((await service.from("files").select("size_bytes, mime_type").eq("id", second!.id).single()).data).toEqual({ size_bytes: PNG.length, mime_type: "application/pdf" });
+    await service.storage.from(BUCKET).remove([second!.storagePath]);
+    await service.from("files").delete().eq("id", second!.id);
   });
 });
 

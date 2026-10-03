@@ -118,3 +118,7 @@ One line per decision made where `docs/spec.md` was silent.
 - Customer screen: one deal → uploads go to it; several → the uploader asks for the deal first; none → the customer. The phone action sheet's "Add photos" uses the same rule.
 - Company logo: stored in the same private bucket at `_company/logo-{uuid}.{ext}` (PNG, JPG, WebP up to 2 MB); the previous object is removed when replaced.
 - Local development: after `scripts/db-push.sh` links a hosted project, the CLI pins service versions to that project. Run `supabase stop && supabase start` before the next gate, or storage uploads fail with `42P10` (schema newer than the running storage container).
+
+## Hotfix after Phase 7 (2026-10-03)
+- Security review of `0009`: `register_files` accepted any `image/*` type the caller declared (SVG included) and did not compare it with the stored object; the bucket accepted any content type. `0010_file_content_types.sql` sets the bucket's allowed types to JPEG, PNG, WebP, GIF, HEIC/HEIF, and PDF, limits `register_files` to the same list (`private.allowed_file_types()`), requires the declared type to equal the stored object's type, and records the size storage reports.
+- Migration numbers from here on are one higher than the spec's phase plan (Phase 8's job RPCs are `0011_job_rpcs.sql`).
