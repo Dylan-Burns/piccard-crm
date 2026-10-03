@@ -6,14 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AddTaskDialog } from "@/components/shared/add-task-dialog";
 import { NoteComposer } from "@/components/shared/note-composer";
+import { CATEGORY_ORDER } from "@/features/files/categories";
+import { FileUploader, type UploadTarget } from "@/features/files/components/file-uploader";
 import { LogContactDialog } from "@/features/leads/components/log-contact-dialog";
 import type { StaffOption } from "@/lib/settings";
 
-/** Phone-only floating button: add a note, log a call, add a task (spec §5.4). */
+/** Phone-only floating button: add a note, add photos, log a call, add a task (spec §5.4). */
 export function CustomerFab({
   customerId,
   customerName,
   primaryDealId,
+  uploadTarget,
+  uploadDeals,
   users,
   currentUserId,
   defaultDue,
@@ -21,6 +25,9 @@ export function CustomerFab({
   customerId: string;
   customerName: string;
   primaryDealId: string | null;
+  /** Fixed upload target, or `uploadDeals` when the customer has several deals to choose from. */
+  uploadTarget?: UploadTarget;
+  uploadDeals?: { id: string; label: string }[];
   users: StaffOption[];
   currentUserId: string;
   defaultDue: string;
@@ -78,11 +85,18 @@ export function CustomerFab({
                   </Button>
                 }
               />
-              {/* Photo upload arrives with the files phase. */}
-              <Button variant="outline" disabled className="h-14 flex-col gap-1">
-                <Camera className="size-4" aria-hidden />
-                Add photos
-              </Button>
+              <FileUploader
+                target={uploadTarget}
+                deals={uploadDeals}
+                categories={CATEGORY_ORDER}
+                description={customerName}
+                trigger={
+                  <Button variant="outline" className="h-14 flex-col gap-1">
+                    <Camera className="size-4" aria-hidden />
+                    Add photos
+                  </Button>
+                }
+              />
             </div>
           </div>
         </SheetContent>

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AddTaskDialog } from "@/components/shared/add-task-dialog";
 import { DealSummaryCard } from "@/components/shared/deal-summary-card";
 import { NoteComposer } from "@/components/shared/note-composer";
@@ -10,6 +11,10 @@ import { Timeline, type TimelineItem } from "@/components/shared/timeline";
 import { AppointmentRow } from "@/features/appointments/components/appointment-dialog";
 import { ScheduleAppointmentDialog } from "@/features/appointments/components/schedule-appointment-dialog";
 import { listAppointments, todayRange } from "@/features/appointments/queries";
+import { CATEGORY_ORDER } from "@/features/files/categories";
+import { FileGrid } from "@/features/files/components/file-grid";
+import { FileUploader } from "@/features/files/components/file-uploader";
+import { listFiles } from "@/features/files/queries";
 import { LogContactDialog } from "@/features/leads/components/log-contact-dialog";
 import { OwnerSelect } from "@/features/leads/components/owner-select";
 import { listLeadSources } from "@/features/leads/queries";
@@ -41,7 +46,10 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   ]);
   if (!detail) notFound();
   const { deal, activities, notes, tasks, duplicateOf } = detail;
-  const appointments = await listAppointments(null, null, timeZone, { opportunityId: deal.id, includeClosed: true });
+  const [appointments, files] = await Promise.all([
+    listAppointments(null, null, timeZone, { opportunityId: deal.id, includeClosed: true }),
+    listFiles(me, { opportunityId: deal.id }),
+  ]);
   const { today } = todayRange(timeZone);
 
   const customerName = `${deal.customer.first_name} ${deal.customer.last_name}`.trim();
@@ -165,7 +173,26 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
             />
           </section>
 
-          {/* Files (phase 7) and estimates (phase 9) add their panels here. */}
+          <section aria-label="Files" className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Files</h2>
+              <FileUploader
+                target={{ opportunityId: deal.id }}
+                categories={CATEGORY_ORDER}
+                title="Upload files"
+                description={customerName}
+                trigger={
+                  <Button variant="outline" className="h-11 md:h-9">
+                    <Upload className="size-4" aria-hidden />
+                    Upload
+                  </Button>
+                }
+              />
+            </div>
+            <FileGrid files={files} permissions={{ canEdit: true, canDelete: me.role === "admin" }} />
+          </section>
+
+          {/* Estimates (phase 9) add their panel here. */}
         </div>
       </div>
     </>

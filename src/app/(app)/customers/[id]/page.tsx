@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Mail, MapPin, MessageSquare, Pencil, Phone, Plus } from "lucide-react";
+import { Mail, MapPin, MessageSquare, Pencil, Phone, Plus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddTaskDialog } from "@/components/shared/add-task-dialog";
 import { DealSummaryCard } from "@/components/shared/deal-summary-card";
@@ -14,6 +14,10 @@ import { EditCustomerDialog, PropertyDialog } from "@/features/customers/compone
 import { CustomerFab } from "@/features/customers/components/customer-fab";
 import { CustomerPanels } from "@/features/customers/components/customer-panels";
 import { getCustomerDetail, getDealMilestones, type CustomerDeal } from "@/features/customers/queries";
+import { CATEGORY_ORDER } from "@/features/files/categories";
+import { FileGrid } from "@/features/files/components/file-grid";
+import { FileUploader } from "@/features/files/components/file-uploader";
+import { listFiles } from "@/features/files/queries";
 import { LogContactDialog } from "@/features/leads/components/log-contact-dialog";
 import { summarizeDeal } from "@/features/opportunities/summary";
 import { requireRole } from "@/lib/auth";
@@ -30,7 +34,7 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
   const me = await requireRole("admin", "sales");
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const [detail, timeZone, users] = await Promise.all([getCustomerDetail(id), getTimeZone(), listUserOptions()]);
+  const [detail, timeZone, users, files] = await Promise.all([getCustomerDetail(id), getTimeZone(), listUserOptions(), listFiles(me, { customerId: id })]);
   if (!detail) notFound();
   const { customer, activities, notes, tasks } = detail;
 
@@ -83,6 +87,9 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
   const defaultDue = tomorrowAtNine(timeZone);
   const { today } = todayRange(timeZone);
   const noteParent = primaryDeal ? { opportunity_id: primaryDeal.id } : { customer_id: customer.id };
+  // Uploads always land on a record: the only deal, a chosen deal, or the customer when there is no deal yet.
+  const uploadTarget = deals.length === 0 ? { customerId: customer.id } : deals.length === 1 ? { opportunityId: deals[0]!.id } : undefined;
+  const uploadDeals = deals.length > 1 ? deals.map((d) => ({ id: d.id, label: `${d.title}${addressOf(d.property_id) ? ` — ${addressOf(d.property_id)}` : ""}` })) : undefined;
 
   return (
     <>
@@ -191,8 +198,23 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
         }
         files={
           <div className="space-y-3">
-            <h2 className="font-semibold">Files</h2>
-            <p className="text-muted-foreground">Photos and documents arrive in a later phase.</p>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Files</h2>
+              <FileUploader
+                target={uploadTarget}
+                deals={uploadDeals}
+                categories={CATEGORY_ORDER}
+                title="Upload files"
+                description={name}
+                trigger={
+                  <Button variant="outline" className="h-11 md:h-8">
+                    <Upload className="size-4" aria-hidden />
+                    Upload
+                  </Button>
+                }
+              />
+            </div>
+            <FileGrid files={files} permissions={{ canEdit: true, canDelete: me.role === "admin" }} photoLimit={6} />
           </div>
         }
         details={
@@ -267,6 +289,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
         customerId={customer.id}
         customerName={name}
         primaryDealId={primaryDeal?.id ?? null}
+        uploadTarget={uploadTarget}
+        uploadDeals={uploadDeals}
         users={users}
         currentUserId={me.id}
         defaultDue={defaultDue}

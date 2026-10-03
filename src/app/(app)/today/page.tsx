@@ -6,6 +6,8 @@ import { TaskList, type TaskItem } from "@/components/shared/task-list";
 import { PageHeader } from "@/components/shell/page-header";
 import { AppointmentDialog } from "@/features/appointments/components/appointment-dialog";
 import { listAppointments, todayRange } from "@/features/appointments/queries";
+import { CATEGORY_ORDER, FIELD_CATEGORIES } from "@/features/files/categories";
+import { FileUploader } from "@/features/files/components/file-uploader";
 import { listOpenTasks } from "@/features/tasks/queries";
 import { requireRole } from "@/lib/auth";
 import { dueState, formatDateTime, formatDay } from "@/lib/dates";
@@ -70,11 +72,17 @@ export default async function TodayPage() {
                         </a>
                       </Button>
                     ) : null}
-                    {/* Photo upload arrives with the files phase. */}
-                    <Button variant="outline" disabled className="h-12">
-                      <Camera className="size-4" aria-hidden />
-                      Add photos
-                    </Button>
+                    <FileUploader
+                      target={{ opportunityId: item.opportunityId, appointmentId: item.id }}
+                      categories={me.role === "field" ? FIELD_CATEGORIES : CATEGORY_ORDER}
+                      description={item.customerName}
+                      trigger={
+                        <Button variant="outline" className="h-12">
+                          <Camera className="size-4" aria-hidden />
+                          Add photos
+                        </Button>
+                      }
+                    />
                     <AppointmentDialog
                       item={item}
                       permissions={permissions}
