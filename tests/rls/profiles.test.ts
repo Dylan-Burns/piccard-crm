@@ -60,14 +60,18 @@ describe("profiles", () => {
 
   it("shows a deactivated user only their own row, and nothing else", async () => {
     await service.from("profiles").update({ is_active: false }).eq("id", fieldId);
-    const { data: rows } = await field.from("profiles").select("id, is_active");
-    expect(rows).toEqual([{ id: fieldId, is_active: false }]);
-    const { data: settings } = await field.from("company_settings").select("id");
-    expect(settings).toEqual([]);
-    // and cannot reactivate themselves
-    const { error } = await field.from("profiles").update({ is_active: true }).eq("id", fieldId);
-    expect(error?.code).toBe("42501");
-    await service.from("profiles").update({ is_active: true }).eq("id", fieldId);
+    try {
+      const { data: rows } = await field.from("profiles").select("id, is_active");
+      expect(rows).toEqual([{ id: fieldId, is_active: false }]);
+      const { data: settings } = await field.from("company_settings").select("id");
+      expect(settings).toEqual([]);
+      // and cannot reactivate themselves: the policy matches no row, so nothing changes
+      await field.from("profiles").update({ is_active: true }).eq("id", fieldId);
+      const { data: still } = await service.from("profiles").select("is_active").eq("id", fieldId).single();
+      expect(still!.is_active).toBe(false);
+    } finally {
+      await service.from("profiles").update({ is_active: true }).eq("id", fieldId);
+    }
   });
 });
 

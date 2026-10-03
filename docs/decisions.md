@@ -55,3 +55,5 @@ One line per decision made where `docs/spec.md` was silent.
 - Seed data lives in `scripts/seed-data.ts` with named fixtures (`FIXTURES`) that the tests look up. It is not transactional: run `supabase db reset` before reseeding. Added `field2@test.local` (a field user with no assignments).
 - The password-reset e2e test uses a unique password per run (Supabase rejects a reset to the current password).
 - Running `pnpm e2e` immediately after `pnpm build` once produced timeouts while the dev server cold-started; a rerun passed. If it recurs, start `pnpm dev` first.
+- `0004_policy_hardening.sql` (security review of 0003): the profiles update policy itself now forbids self-changes to role/is_active and any self-edit by a deactivated user; field access through an appointment ends when it is cancelled or a no-show. Spec migration numbers from Phase 3 on shifted up by one (`0005_lead_rpcs.sql` … `0015_invoice_rpcs.sql`).
+- Open decision for the owner: field users can read every note on a deal they can access, including sales notes that could mention prices. See the question raised on 2026-10-03.

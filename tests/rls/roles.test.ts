@@ -183,3 +183,31 @@ describe("service-only tables", () => {
     }
   });
 });
+
+describe("policy hardening (0004)", () => {
+  it("field access through an appointment ends when it is cancelled", async () => {
+    const { data: before } = await field.from("customers").select("id").eq("id", fx.inspectionDeal.customer_id);
+    expect(before).toHaveLength(1);
+
+    await service.from("appointments").update({ status: "cancelled" }).eq("opportunity_id", fx.inspectionDeal.id);
+    try {
+      const { data: customers } = await field.from("customers").select("id").eq("id", fx.inspectionDeal.customer_id);
+      expect(customers).toEqual([]);
+      const { data: notes } = await field.from("notes").select("id").eq("opportunity_id", fx.inspectionDeal.id);
+      expect(notes).toEqual([]);
+    } finally {
+      await service.from("appointments").update({ status: "scheduled" }).eq("opportunity_id", fx.inspectionDeal.id);
+    }
+  });
+
+  it("a deactivated user cannot edit their own profile", async () => {
+    await service.from("profiles").update({ is_active: false }).eq("id", fieldId);
+    try {
+      await field.from("profiles").update({ full_name: "Still Here" }).eq("id", fieldId);
+      const { data } = await service.from("profiles").select("full_name").eq("id", fieldId).single();
+      expect(data!.full_name).toBe("Fran Field");
+    } finally {
+      await service.from("profiles").update({ is_active: true }).eq("id", fieldId);
+    }
+  });
+});

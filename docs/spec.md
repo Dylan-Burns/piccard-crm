@@ -780,7 +780,7 @@ Ownership (`owner_id`) is for accountability and reporting, **not** access contr
 | Settings: company, users, lead sources, price book, integrations | Yes | No | No |
 | Own profile (name, phone, password) | Yes | Yes | Yes |
 
-"Deals a field user can access" means: a deal with an appointment assigned to them, or a deal whose job they are assigned to. Field users never query `opportunities` directly; their screens read `jobs`, `appointments`, `customers`, `properties`, `notes`, `files`, `tasks`.
+"Deals a field user can access" means: a deal with a scheduled or completed appointment assigned to them (access ends if it is cancelled or a no-show), or a deal whose job they are assigned to. Field users never query `opportunities` directly; their screens read `jobs`, `appointments`, `customers`, `properties`, `notes`, `files`, `tasks`.
 
 ### 3.2 Helper functions
 
@@ -806,7 +806,8 @@ create or replace function private.field_can_access_opportunity(p_opp uuid) retu
 language sql stable security definer set search_path = '' as $$
   select coalesce(private.auth_role() = 'field', false) and (
     exists (select 1 from public.appointments a
-             where a.opportunity_id = p_opp and a.assigned_to = auth.uid())
+             where a.opportunity_id = p_opp and a.assigned_to = auth.uid()
+               and a.status in ('scheduled', 'completed'))
     or exists (select 1 from public.jobs j join public.job_assignments ja on ja.job_id = j.id
                 where j.opportunity_id = p_opp and ja.user_id = auth.uid())
   )
@@ -816,7 +817,8 @@ create or replace function private.field_can_access_customer(p_customer uuid) re
 language sql stable security definer set search_path = '' as $$
   select coalesce(private.auth_role() = 'field', false) and (
     exists (select 1 from public.appointments a
-             where a.customer_id = p_customer and a.assigned_to = auth.uid())
+             where a.customer_id = p_customer and a.assigned_to = auth.uid()
+               and a.status in ('scheduled', 'completed'))
     or exists (select 1 from public.jobs j join public.job_assignments ja on ja.job_id = j.id
                 where j.customer_id = p_customer and ja.user_id = auth.uid())
   )
@@ -862,8 +864,12 @@ alter table email_log enable row level security;                 -- no policies:
 -- Own row is always visible, so the app can tell a deactivated user from a missing profile.
 create policy profiles_select on profiles for select to authenticated
   using ((select private.auth_role()) is not null or id = auth.uid());
+-- A user may edit their own row only while active and without changing role or is_active
+-- (auth_role() reads the pre-update row, so `role = auth_role()` means "unchanged").
 create policy profiles_update on profiles for update to authenticated
-  using (id = auth.uid() or (select private.is_admin())) with check (id = auth.uid() or (select private.is_admin()));
+  using ((select private.is_admin()) or (id = auth.uid() and (select private.auth_role()) is not null))
+  with check ((select private.is_admin())
+              or (id = auth.uid() and is_active and role = (select private.auth_role())));
 -- no insert/delete policy: rows come from the auth trigger; role changes are guarded by guard_profile_privileges.
 
 -- company_settings
@@ -1718,7 +1724,7 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 2 — Complete schema, triggers, RLS, seed
 
 **Goal:** the entire database from §2 and §3 exists, is tested per role, and has realistic seed data. No UI.
-**Tables:** all remaining 21. **Migrations:** `0002_schema.sql`, `0003_rls.sql`.
+**Tables:** all remaining 21. **Migrations:** `0002_schema.sql`, `0003_rls.sql`, `0004_policy_hardening.sql` (review fixes to 0003; later migration numbers shifted up by one).
 
 **Steps**
 1. `0002_schema.sql`: tables in the order given in §2.8, copied from §2.2–§2.7 exactly, with a `set_updated_at` trigger on each table that has `updated_at`.
@@ -1748,11 +1754,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 3 — Leads, customers, notes, tasks
 
 **Goal:** staff can enter a lead by hand (with duplicate detection), work the leads inbox, open a customer, add notes, log calls, and manage follow-up tasks.
-**Tables used:** customers, properties, opportunities, lead_sources, lead_submissions, notes, activities, tasks. **Migration:** `0004_lead_rpcs.sql`.
+**Tables used:** customers, properties, opportunities, lead_sources, lead_submissions, notes, activities, tasks. **Migration:** `0005_lead_rpcs.sql`.
 **Screens:** `/leads`, `/leads/new`, `/customers`, `/customers/[id]`, `/tasks`, `/settings/lead-sources`.
 
 **Steps**
-1. `0004_lead_rpcs.sql` — internal helpers (not granted to `authenticated`): `default_assignee(p_opportunity_id)` (owner, else first active admin by `created_at`); `create_auto_task(p_opportunity_id, p_job_id, p_auto_key, p_title, p_due_at)` with `on conflict do nothing`; `complete_auto_task(p_opportunity_id, p_auto_key)`; `check_stage_gate(p_opportunity_id, p_to_stage) returns text[]` (missing-field names per §4.1); `run_stage_entry_automation(p_opportunity_id, p_stage)`; `log_activity(...)`.
+1. `0005_lead_rpcs.sql` — internal helpers (not granted to `authenticated`): `default_assignee(p_opportunity_id)` (owner, else first active admin by `created_at`); `create_auto_task(p_opportunity_id, p_job_id, p_auto_key, p_title, p_due_at)` with `on conflict do nothing`; `complete_auto_task(p_opportunity_id, p_auto_key)`; `check_stage_gate(p_opportunity_id, p_to_stage) returns text[]` (missing-field names per §4.1); `run_stage_entry_automation(p_opportunity_id, p_stage)`; `log_activity(...)`.
 2. Same file: `create_lead(p jsonb)` per §6.5, `log_contact(...)` per §4.1, `assign_owner` and `set_task_status` per §4.6, each with its explicit `grant execute`. Regenerate types.
 3. `src/lib/phone.ts` (`toE164`, `formatPhone`), `src/lib/money.ts` (`formatCents`, `parseDollarsToCents`), `src/lib/dates.ts` (format in company timezone, relative time). Unit tests for each.
 4. `features/leads`: `schemas.ts` (zod `LeadInput`), `actions.ts` (`createLead`, `checkDuplicates`, `assignOwner`), `queries.ts`. Build `/leads/new` and `/leads` per §5.6. The duplicate panel on `/leads/new` offers "Use this customer" and, when that customer has open deals, "Add note to this deal" for each — the human makes the merge decision.
@@ -1776,11 +1782,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 4 — Pipeline board, deal detail, Won and Lost
 
 **Goal:** the Kanban board works on desktop and phone, enforces stage gates, and Won creates a job.
-**Tables used:** opportunities, opportunity_stage_history, jobs, invoices (written by `mark_opportunity_won`), tasks, activities. **Migration:** `0005_pipeline_rpcs.sql`.
+**Tables used:** opportunities, opportunity_stage_history, jobs, invoices (written by `mark_opportunity_won`), tasks, activities. **Migration:** `0006_pipeline_rpcs.sql`.
 **Screens:** `/pipeline`, `/opportunities/[id]`.
 
 **Steps**
-1. `0005_pipeline_rpcs.sql`: `change_opportunity_stage`, `mark_opportunity_won` (all eleven steps of §4.2, including invoice creation per §7.5), `mark_opportunity_lost`, `reopen_opportunity` (§4.3). Regenerate types.
+1. `0006_pipeline_rpcs.sql`: `change_opportunity_stage`, `mark_opportunity_won` (all eleven steps of §4.2, including invoice creation per §7.5), `mark_opportunity_lost`, `reopen_opportunity` (§4.3). Regenerate types.
 2. Install `@dnd-kit/core @dnd-kit/sortable`. `features/pipeline`: `queries.ts` (board query per §5.5), `actions.ts` (`moveStage`, `markWon`, `markLost`, `reopenDeal`).
 3. Components: `Board` (desktop), `StageColumn`, `DealCard`, `MobileBoard` (stage chips + list + swipe), `MoveSheet`, `GateDialog`, `WonDialog`, `LostDialog`, board filters stored in the URL query string.
 4. Next-step indicator on cards per §5.5, computed in the board query (earliest open task due, next appointment).
@@ -1802,7 +1808,7 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 5 — Lead ingestion, email, and the lead intake pilot
 
 **Goal:** website and Google Ads leads arrive on their own, durably and deduplicated; the assignee is emailed; existing open deals are imported; the team starts a **lead intake pilot** (leads and pipeline only — scheduling, files, jobs, and estimates stay in the old process until Phase 10).
-**Tables used:** lead_submissions, email_log, plus Phase 3 tables. **Migration:** `0006_ingestion.sql` (`process_lead_submission`, service-role grant).
+**Tables used:** lead_submissions, email_log, plus Phase 3 tables. **Migration:** `0007_ingestion.sql` (`process_lead_submission`, service-role grant).
 **Routes:** `/api/webhooks/leads/website`, `/api/webhooks/leads/google-ads`, `/api/cron/process-outbox` (lead and email retries for now); Settings → Integrations (lead section).
 
 **Steps**
@@ -1833,11 +1839,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 6 — Appointments, calendar, Today screen, task digest
 
 **Goal:** inspections and other visits are scheduled in the CRM, shown on a calendar, and field users have a phone home screen.
-**Tables used:** appointments, tasks, activities. **Migration:** `0007_appointment_rpcs.sql`.
+**Tables used:** appointments, tasks, activities. **Migration:** `0008_appointment_rpcs.sql`.
 **Screens:** `/calendar`, `/today`, Appointments panel on deal and customer screens; cron `task-digest`.
 
 **Steps**
-1. `0007_appointment_rpcs.sql`: `schedule_appointment`, `reschedule_appointment`, `cancel_appointment`, `complete_appointment` per §4.6 and the event table in §4.1 (auto-move to `inspection_scheduled`, `send_estimate` task on completion, fallback to `qualified` on cancel/no-show), each with its explicit grant.
+1. `0008_appointment_rpcs.sql`: `schedule_appointment`, `reschedule_appointment`, `cancel_appointment`, `complete_appointment` per §4.6 and the event table in §4.1 (auto-move to `inspection_scheduled`, `send_estimate` task on completion, fallback to `qualified` on cancel/no-show), each with its explicit grant.
 2. `features/appointments`: schemas, actions (`scheduleAppointment`, `rescheduleAppointment`, `cancelAppointment`, `completeAppointment`), queries by date range and assignee.
 3. `ScheduleAppointmentDialog`: type, date, start time, duration (default 60 min for inspection), assignee (default deal owner), notes. Times are entered and shown in the company timezone. Used from the deal page, the customer page, the calendar, and the pipeline's drop on `inspection_scheduled` (wire that Phase 4 placeholder).
 4. `/calendar` per §5.6: agenda on mobile; week and month CSS-grid views on desktop; assignee and type filters; drag to reschedule on desktop.
@@ -1860,11 +1866,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 7 — Files and photos
 
 **Goal:** photos and documents are uploaded from inside a deal, job, or appointment — fast on a phone — and always land on the right record.
-**Tables used:** files, activities. **Migration:** `0008_files.sql`.
+**Tables used:** files, activities. **Migration:** `0009_files.sql`.
 **Screens:** Files panel on customer, deal, and (later) job screens; "Add photos" on `/today` cards.
 
 **Steps**
-1. `0008_files.sql`: create the private bucket `crm-files` (25 MB limit, no object policies) and `register_files(p jsonb)` per §4.6.
+1. `0009_files.sql`: create the private bucket `crm-files` (25 MB limit, no object policies) and `register_files(p jsonb)` per §4.6.
 2. `features/files/actions.ts`: `createUploadUrls({opportunityId | customerId, appointmentId?, files:[{name,type,size}]})` → checks access per §3.4, generates ids and paths, returns signed upload URLs; `registerFiles`; `getSignedUrls(fileIds)`; `updateFile`; `deleteFile` (admin; removes the object then the row).
 3. Install `browser-image-compression`. `FileUploader`: accepts camera and library (`accept="image/*,application/pdf"`, `multiple`); compresses images to max 2000px / quality 0.8 in the browser; uploads directly to the signed URLs, three at a time; per-file progress; automatic retry three times with backoff; failed files stay listed with a Retry button; warns before navigating away while uploads are in flight.
 4. The uploader **always** receives a target from its context (deal, job, or appointment). On the customer screen with several deals it requires choosing the deal first. There is no global upload entry point.
@@ -1886,11 +1892,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 8 — Jobs
 
 **Goal:** won deals are managed as jobs: scheduled, crewed, tracked to completion.
-**Tables used:** jobs, job_assignments, appointments, tasks, files, notes. **Migration:** `0009_job_rpcs.sql`.
+**Tables used:** jobs, job_assignments, appointments, tasks, files, notes. **Migration:** `0010_job_rpcs.sql`.
 **Screens:** `/jobs`, `/jobs/[id]`, "My jobs" on `/today`.
 
 **Steps**
-1. `0009_job_rpcs.sql`: `schedule_job` and `set_job_status` per §4.5 and §4.6, with grants.
+1. `0010_job_rpcs.sql`: `schedule_job` and `set_job_status` per §4.5 and §4.6, with grants.
 2. `features/jobs`: queries (list with status filter and search; detail), actions (`updateJob`, `setJobStatus`, `assignUsers`).
 3. `/jobs`: table on desktop, cards on mobile; columns job number, customer, address, type, status, scheduled dates, crew.
 4. `/jobs/[id]` per §5.6. Staff see contract amount (from the opportunity), Timeline, and an Invoices panel listing the draft invoices created at Won (read-only here; due dates, regenerate, and sending arrive in Phase 13). Field users see Scope, Schedule, Crew, Permit, Files, Notes, and the status control limited to Start and Complete.
@@ -1912,13 +1918,13 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 9 — Estimate builder and PDF
 
 **Goal:** staff build an estimate from the price book and download a professional PDF.
-**Tables used:** price_book_items, estimates, estimate_line_items. **Migration:** `0010_estimate_rpcs.sql` (`create_estimate`, `save_estimate_lines`, `void_estimate`).
+**Tables used:** price_book_items, estimates, estimate_line_items. **Migration:** `0011_estimate_rpcs.sql` (`create_estimate`, `save_estimate_lines`, `void_estimate`).
 **Decision gate (before starting):** the owner has confirmed in writing (recorded in `docs/decisions.md`) the tax rule and rate, deposit percent, estimate validity, warranty length, estimate terms text, and how pricing works today (§11 questions 1–4). Do not start the phase on defaults.
 **Screens:** `/settings/price-book`, Estimates panel on the deal, `/opportunities/[id]/estimates/[estimateId]`.
 
 **Steps**
 1. `/settings/price-book`: CRUD table (name, description, unit, price, taxable, active).
-2. `0010_estimate_rpcs.sql` with `create_estimate` (copies tax rate, deposit percent, terms, valid-until from settings; title defaults to the deal title; logs `estimate_created`) , `save_estimate_lines`, and `void_estimate`. `features/estimates`: `createEstimate`, `updateEstimate` (granted columns only), `saveEstimateLines`, `voidEstimate`; queries.
+2. `0011_estimate_rpcs.sql` with `create_estimate` (copies tax rate, deposit percent, terms, valid-until from settings; title defaults to the deal title; logs `estimate_created`) , `save_estimate_lines`, and `void_estimate`. `features/estimates`: `createEstimate`, `updateEstimate` (granted columns only), `saveEstimateLines`, `voidEstimate`; queries.
 3. `features/estimates/totals.ts` implementing §7.2, with a unit test over fixtures and an integration test asserting the same fixtures produce the same numbers from the database trigger.
 4. Builder page: header fields; line list with add-from-price-book (searchable `Command` popover) and add-custom; inline edit of quantity and price; reorder with up/down buttons; live totals panel; read-only rendering when status is not `draft`. On mobile each line is a card and the totals bar is sticky at the bottom.
 5. Install `@react-pdf/renderer`. `EstimateDocument.tsx` per §7.3 and `GET /api/estimates/[id]/pdf` (staff only, Node runtime). Display numbers as `E-1001` / `E-1001-v2`.
@@ -1937,11 +1943,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 10 — Sending, public acceptance, nightly maintenance
 
 **Goal:** an estimate is emailed, viewed, and accepted online; acceptance wins the deal and creates the job. Stale deals and expired estimates are caught nightly.
-**Tables used:** estimates, files, email_log, opportunities, jobs, invoices, tasks. **Migration:** `0011_estimate_lifecycle.sql`.
+**Tables used:** estimates, files, email_log, opportunities, jobs, invoices, tasks. **Migration:** `0012_estimate_lifecycle.sql`.
 **Screens:** `/e/[token]`; send / revise controls in the builder.
 
 **Steps**
-1. `0011_estimate_lifecycle.sql`: `mark_estimate_sent`, `revise_estimate`, `record_estimate_view`, `accept_estimate`, `decline_estimate` (§7.4, §4.1 events), and `run_nightly_maintenance` (§4.1 expiry, §4.4 invariant). Public RPCs are executable by `service_role` only.
+1. `0012_estimate_lifecycle.sql`: `mark_estimate_sent`, `revise_estimate`, `record_estimate_view`, `accept_estimate`, `decline_estimate` (§7.4, §4.1 events), and `run_nightly_maintenance` (§4.1 expiry, §4.4 invariant). Public RPCs are executable by `service_role` only.
 2. `sendEstimate` action following the exact order in §7.4. `EstimateEmail` template with the public link. "Resend email" and "Copy link" controls.
 3. `/e/[token]` per §7.4 using the service client; rendering never changes status; a client script posts to `POST /api/public/estimates/[token]/view` after 2 seconds visible; server actions `acceptEstimate` and `declineEstimate` (no rate limit: they require an unguessable 122-bit token and are idempotent state changes); states for void, expired, accepted, declined; "approve" wording. `GET /api/public/estimates/[token]/pdf` redirecting to a 5-minute signed URL of `pdf_path`. `Cache-Control: no-store` and `X-Robots-Tag: noindex` on every `/e/*` and `/api/public/*` response.
 4. Notification emails to the deal owner on accept and decline; "Deal won" email to admins.
@@ -1963,10 +1969,10 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 11 — Dashboard and reports
 
 **Goal:** the owner sees unambiguous numbers.
-**Migration:** `0012_reports.sql`. **Screens:** `/dashboard`, `/reports`.
+**Migration:** `0013_reports.sql`. **Screens:** `/dashboard`, `/reports`.
 
 **Steps**
-1. `0012_reports.sql`: every function in §8, following the §2.1 function conventions, with `grant execute … to authenticated`.
+1. `0013_reports.sql`: every function in §8, following the §2.1 function conventions, with `grant execute … to authenticated`.
 2. `/dashboard`: date-range selector (default This month); tiles New leads, Revenue (sold) with Invoiced and Outstanding beneath, Conversion rate, Active jobs, Upcoming appointments, Pipeline value; below, "Needs attention" (unassigned leads, overdue tasks, deals with no next step) and the next seven days of appointments. Admin sees company numbers; sales calls the function with `p_owner = self`.
 3. `/reports` (admin): the five tables from §8.2–§8.6 with the range picker and CSV download per table.
 4. Tests: seed a fixed dataset and assert exact values from each function, including that a `duplicate`-lost deal is excluded, that a deal won at 23:30 company time on the last day of a month counts in that month, that a deal reassigned after it was won still counts for its `closed_owner_id`, and that speed-to-lead uses the first attempt (a no-answer call), not the first connection.
@@ -1984,11 +1990,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 12 — Google Calendar sync
 
 **Goal:** every CRM appointment appears on the company Google calendar and stays correct.
-**Tables used:** integration_connections, sync_outbox, appointments. **Migration:** `0013_outbox_rpcs.sql`.
+**Tables used:** integration_connections, sync_outbox, appointments. **Migration:** `0014_outbox_rpcs.sql`.
 **Decision gate (before starting):** the owner has confirmed (in `docs/decisions.md`) which Google account connects, whether it is Google Workspace (Internal consent screen) or Gmail (published app), and who needs events on their calendar (§11 question 8). OAuth redirect URIs are registered for production and `http://localhost:3000` (§1.5).
 
 **Steps**
-1. `0013_outbox_rpcs.sql`: `claim_outbox_batch`, `complete_outbox`, `fail_outbox`, and `lock_integration(provider)` (advisory lock) per §6.1; service role only.
+1. `0014_outbox_rpcs.sql`: `claim_outbox_batch`, `complete_outbox`, `fail_outbox`, and `lock_integration(provider)` (advisory lock) per §6.1; service role only.
 2. `lib/integrations/crypto.ts` (AES-256-GCM encrypt/decrypt, unit-tested round trip) and `lib/integrations/outbox.ts` (worker loop with a per-provider handler map).
 3. Connect and callback routes per §6.1 and §6.2; on first connect create the secondary calendar and store its id. Disconnect action.
 4. `lib/integrations/google-calendar.ts` using `fetch` against the REST API (no SDK): `getValidAccessToken`, `upsertEvent(appointment)`, `deleteEvent(appointment)` with the deterministic event id and the 409 → patch rule; error mapping per §6.2.
@@ -2011,12 +2017,12 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 13 — Invoices and QuickBooks
 
 **Goal:** an admin sends an invoice to QuickBooks with one click and sees payment status in the CRM.
-**Tables used:** invoices, invoice_line_items, customers, integration_connections, sync_outbox. **Migration:** `0014_invoice_rpcs.sql` (`regenerate_job_invoices`, `void_invoice`, `queue_invoice_sync`, `record_invoice_manually`). If any other schema change seems needed, stop and report.
+**Tables used:** invoices, invoice_line_items, customers, integration_connections, sync_outbox. **Migration:** `0015_invoice_rpcs.sql` (`regenerate_job_invoices`, `void_invoice`, `queue_invoice_sync`, `record_invoice_manually`). If any other schema change seems needed, stop and report.
 **Decision gate (before starting):** the owner and their accountant have confirmed (in `docs/decisions.md`) QuickBooks Online edition, the income item, whether sales tax is charged and how QuickBooks tax is configured, and that admins send invoices by hand (§11 questions 1, 9, 10).
 **Time box:** two sessions. If exceeded, apply the fallback in §6.6 item 7.
 
 **Steps**
-1. `0014_invoice_rpcs.sql`. Invoices panel on `/jobs/[id]` (staff): list with status and sync badges; admin can change a draft's due date, regenerate drafts from the estimate, and void a draft. Amounts are never edited by hand (§7.5).
+1. `0015_invoice_rpcs.sql`. Invoices panel on `/jobs/[id]` (staff): list with status and sync badges; admin can change a draft's due date, regenerate drafts from the estimate, and void a draft. Amounts are never edited by hand (§7.5).
 2. Connect and callback routes for Intuit; store `realmId` and environment. Configuration step: fetch Items and TaxCodes and save the chosen ids in `config`.
 3. `lib/integrations/quickbooks.ts` with `fetch`: token refresh under `lock_integration` persisting the rotated refresh token; `findOrCreateCustomer`; `createInvoice` with `requestid`; total check; error mapping per §6.3.
 4. `sendInvoiceToQuickBooks` action (admin): validate the connection and config, call `queue_invoice_sync`, process in `after()`.
