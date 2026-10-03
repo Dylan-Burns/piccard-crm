@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-// Lead sources, price book and integrations are added in phases 3, 9 and 5/12/13.
+// Price book and integrations are added in phases 9 and 5/12/13.
 const ITEMS = [
   { href: "/settings/profile", label: "Profile", adminOnly: false },
   { href: "/settings/company", label: "Company", adminOnly: true },
   { href: "/settings/users", label: "Users", adminOnly: true },
+  { href: "/settings/lead-sources", label: "Lead sources", adminOnly: true },
 ];
 
 export function SettingsNav({ isAdmin }: { isAdmin: boolean }) {

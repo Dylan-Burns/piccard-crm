@@ -34,7 +34,7 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 11. **Follow-ups are tasks.** Never add a "next follow-up" column. Automatic tasks carry an `auto_key` and are created with `on conflict do nothing`.
 12. **Attachments populate every ancestor id** (`customer_id`, `opportunity_id`, `job_id`); the `fill_parent_ids` trigger does this. Pass only the most specific id.
 13. **Activity summaries never contain dollar amounts.** Put amounts in `metadata`.
-14. **Field users must never receive prices.** They have no access to opportunities, estimates, invoices, or activities. Field screens read only jobs, appointments, customers, properties, notes, files, tasks.
+14. **Field users must never receive prices.** They have no access to opportunities, estimates, invoices, or activities. Field screens read only jobs, appointments, customers, properties, notes, files, tasks. Staff notes are hidden from field unless `shared_with_crew` is set.
 15. **Files are uploaded only from inside a record** (deal, job, appointment). The server generates storage paths. All storage access is by server-signed URL; there are no storage policies.
 16. **External calls go through the outbox** (`sync_outbox`) and must be idempotent: Google event id = appointment UUID without dashes; QuickBooks create uses `requestid` = invoice id; emails use `email_log.dedupe_key` and only status `sent` suppresses a retry.
 17. **Integration failures never fail a user action.** Save first, sync after. Webhooks store the raw payload before answering 200, and answer 5xx if they cannot store it.

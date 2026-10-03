@@ -57,3 +57,15 @@ One line per decision made where `docs/spec.md` was silent.
 - Running `pnpm e2e` immediately after `pnpm build` once produced timeouts while the dev server cold-started; a rerun passed. If it recurs, start `pnpm dev` first.
 - `0004_policy_hardening.sql` (security review of 0003): the profiles update policy itself now forbids self-changes to role/is_active and any self-edit by a deactivated user; field access through an appointment ends when it is cancelled or a no-show. Spec migration numbers from Phase 3 on shifted up by one (`0005_lead_rpcs.sql` … `0015_invoice_rpcs.sql`).
 - Open decision for the owner: field users can read every note on a deal they can access, including sales notes that could mention prices. See the question raised on 2026-10-03.
+
+## Phase 3 (2026-10-03)
+- Owner decision: notes have a "Share with crew" checkbox (`notes.shared_with_crew`, default off). Field users read only shared notes; notes written by field users are always shared (trigger). Spec §2.6, §2.10, §3.1, §3.3 updated.
+- `log_contact` with a connected outcome on an unowned lead makes the caller the owner, so the Contacted gate passes without a separate step.
+- `create_lead` accepts `customer_id` / `property_id` so the manual form's "Use this customer" attaches the new deal to an existing customer. It implements the import rules (§6.5) already; the import script itself is Phase 5.
+- `private.apply_stage_change` holds the shared "update stage → run entry automation → log" step; Phase 4's `change_opportunity_stage` wraps it with the gate check.
+- Deal cards are not links yet: the deal page (`/opportunities/[id]`) is Phase 4. Leads and tasks link to the customer page.
+- There is no standalone "create customer" screen or action: customers are created through a lead (so dedupe always runs). Customers can be edited and given properties from the customer page.
+- React 19 resets uncontrolled fields after a form action. Longer forms use `useFormAction` (`components/shared/use-form-action.ts`), which submits without the reset so typed input survives a validation error.
+- Customer search: each word must match first name, last name, company, or email; a phone-like query matches phone digits; the whole query is also matched against street addresses. Filter terms are stripped of PostgREST filter characters.
+- On phones the customer header (name, Call / Text / Navigate) is sticky; the section tabs below it are not.
+- RPC results are unwrapped by `lib/rpc.ts` (`unwrapRpc`) into `ActionResult`.

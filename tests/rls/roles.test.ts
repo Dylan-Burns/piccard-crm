@@ -26,7 +26,7 @@ describe("sales", () => {
       expect(error, table).toBeNull();
     }
     const { data } = await sales.from("opportunities").select("id");
-    expect(data!.length).toBe(20);
+    expect(data!.length).toBeGreaterThanOrEqual(20); // seed has 20; e2e runs add more
   });
 
   it("creates and edits a customer and property, but cannot delete them", async () => {

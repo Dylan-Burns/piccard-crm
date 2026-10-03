@@ -553,8 +553,9 @@ create table notes (
   customer_id    uuid not null references customers(id) on delete cascade,
   opportunity_id uuid references opportunities(id) on delete cascade,
   job_id         uuid references jobs(id) on delete cascade,
-  author_id      uuid references profiles(id) on delete set null,
+  author_id      uuid references profiles(id) on delete set null,   -- null = customer's message from a lead form
   is_pinned      boolean not null default false,
+  shared_with_crew boolean not null default false,   -- staff notes are staff-only unless shared; field-authored notes are always shared (trigger)
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
@@ -741,7 +742,7 @@ alter table tasks     alter column created_by set default auth.uid();
 | appointments | ✓ | — | title, notes | ✓ | `schedule_appointment`, `reschedule_appointment`, `cancel_appointment`, `complete_appointment`, `schedule_job` |
 | invoices | ✓ | — | due_on | — | `mark_opportunity_won`, `regenerate_job_invoices`, `void_invoice`, `queue_invoice_sync`, `record_invoice_manually`, workers |
 | invoice_line_items | ✓ | — | — | — | same as invoices |
-| notes | ✓ | body, customer_id, opportunity_id, job_id, is_pinned | body, is_pinned | ✓ | |
+| notes | ✓ | body, customer_id, opportunity_id, job_id, is_pinned, shared_with_crew | body, is_pinned, shared_with_crew | ✓ | |
 | files | ✓ | — | category, caption | ✓ | `register_files` |
 | activities | ✓ | — | — | — | RPCs and triggers only (no forged `deal_won` entries) |
 | tasks | ✓ | title, description, due_at, customer_id, opportunity_id, job_id, assigned_to | title, description, due_at, assigned_to | ✓ | `set_task_status` (complete / cancel / reopen) |
@@ -771,7 +772,7 @@ Ownership (`owner_id`) is for accountability and reporting, **not** access contr
 | Jobs | Full | Read, edit permit/warranty/scope, assign users, schedule (via `schedule_job`), change status | Read assigned jobs (no money columns exist on jobs); start/complete only via `set_job_status` |
 | Appointments | Full | Create, reschedule, cancel (via RPCs), read and edit title/notes on all | Read own; complete or mark no-show only via `complete_appointment` |
 | Invoices | Read; set due date; regenerate/void drafts; send to QuickBooks; record manually (via RPCs) | Read | No access |
-| Notes | Full | Create, read all; edit/delete own | Read and create on deals they can access; edit/delete own |
+| Notes | Full | Create, read all; edit/delete own; choose "Share with crew" per note | Read notes shared with the crew on deals they can access (their own notes are always shared); create; edit/delete own |
 | Files | Full; delete | Upload, read all | Read `photo`, `measurement_report`, `permit`, `other` on deals they can access; upload via `register_files` |
 | Activities (timeline) | Read; log calls/emails/SMS via `log_contact` | Same as admin | No access |
 | Tasks | Full | Create, read, edit all; complete/cancel via `set_task_status` | Read their own; complete via `set_task_status` |
@@ -941,7 +942,8 @@ create policy invoice_lines_select on invoice_line_items for select to authentic
 
 -- notes
 create policy notes_select on notes for select to authenticated
-  using ((select private.is_staff()) or (opportunity_id is not null and private.field_can_access_opportunity(opportunity_id)));
+  using ((select private.is_staff())
+         or (opportunity_id is not null and shared_with_crew and private.field_can_access_opportunity(opportunity_id)));
 create policy notes_insert on notes for insert to authenticated
   with check (author_id = auth.uid() and
               ((select private.is_staff()) or (opportunity_id is not null and private.field_can_access_opportunity(opportunity_id))));
@@ -1012,6 +1014,7 @@ Events inside a stage that fire automation:
 | Event | Automation |
 |---|---|
 | `log_contact`, any outcome | If `first_contact_attempted_at` is null, set it to `now()` and `first_contact_attempted_by` to the caller. (This is what speed-to-lead measures, §8.) |
+| `log_contact` with outcome `connected` on an unowned deal in `new` | The caller becomes the owner (so gate G1 passes) and open automatic tasks move to them, then the deal moves to `contacted`. |
 | `log_contact` with outcome `no_answer` or `left_voicemail` while stage is `new` | Activity logged. Completes `first_contact`. Creates task `retry_contact` "Call again: {name}" due next day 9:00 business time. Stage stays `new`. |
 | Inspection appointment completed | Activity `appointment_completed`. Creates task `send_estimate` "Prepare and send estimate" due +2 days, assigned to the deal owner. |
 | Inspection appointment cancelled or no-show | Activity `appointment_cancelled`. If the deal has no other scheduled inspection and stage is `inspection_scheduled`, move the deal back to `qualified` (which recreates `schedule_inspection`). |
@@ -2100,7 +2103,7 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 11. **Follow-ups are tasks.** Never add a "next follow-up" column. Automatic tasks carry an `auto_key` and are created with `on conflict do nothing`.
 12. **Attachments populate every ancestor id** (`customer_id`, `opportunity_id`, `job_id`); the `fill_parent_ids` trigger does this. Pass only the most specific id.
 13. **Activity summaries never contain dollar amounts.** Put amounts in `metadata`.
-14. **Field users must never receive prices.** They have no access to opportunities, estimates, invoices, or activities. Field screens read only jobs, appointments, customers, properties, notes, files, tasks.
+14. **Field users must never receive prices.** They have no access to opportunities, estimates, invoices, or activities. Field screens read only jobs, appointments, customers, properties, notes, files, tasks. Staff notes are hidden from field unless `shared_with_crew` is set.
 15. **Files are uploaded only from inside a record** (deal, job, appointment). The server generates storage paths. All storage access is by server-signed URL; there are no storage policies.
 16. **External calls go through the outbox** (`sync_outbox`) and must be idempotent: Google event id = appointment UUID without dashes; QuickBooks create uses `requestid` = invoice id; emails use `email_log.dedupe_key` and only status `sent` suppresses a retry.
 17. **Integration failures never fail a user action.** Save first, sync after. Webhooks store the raw payload before answering 200, and answer 5xx if they cannot store it.
@@ -2181,6 +2184,7 @@ Each has a default so development can proceed, but defaults are for building, no
   - Public estimate actions and webhooks have no session and use service-role RPCs; `anon` has no grant or policy anywhere.
 - **Lifecycle rules cannot be bypassed:** every column that a §4 rule sets (stage, stage_entered_at, won_*/lost_*, closed_*, first_contact*, amount_cents, owner_id, estimate status/totals/timestamps, job status/dates, appointment times/status/assignee, invoice amounts/status, task status, sync columns) is absent from the §2.10 update grants.
 - **Prices hidden from field:** `jobs` and `appointments` have no money columns; `scope_summary` is price-free; field cannot select `opportunities`, `estimates`, `invoices`, `activities`, or `estimate`/`contract`/`insurance`/`invoice` files.
+- **Field users and prices:** staff notes are hidden from field unless marked shared (`notes.shared_with_crew`), closing the one free-text path by which a price could reach the crew.
 - **Automation is idempotent:** auto tasks (`tasks_auto_open_uidx`), jobs (`jobs.opportunity_id` unique), accepted estimates (partial unique index), lead deliveries (`lead_submissions_external_uidx`), outbox rows (`sync_outbox_pending_uidx`), emails (`email_log.dedupe_key`, status `sent` only), deposit/final invoices (`invoices_one_per_kind_uidx`), lead processing (`process_lead_submission` returns early unless `received`/`error`).
 
 ---

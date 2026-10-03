@@ -1,6 +1,5 @@
 "use client";
 
-import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FieldError } from "@/components/shared/field-error";
 import { NativeSelect } from "@/components/shared/native-select";
 import { useActionToast } from "@/components/shared/use-action-toast";
+import { useFormAction } from "@/components/shared/use-form-action";
 import { updateCompany } from "@/features/settings/actions";
 import type { Database } from "@/types/database";
 
@@ -22,7 +22,7 @@ export function CompanyForm({
   owners: { id: string; name: string }[];
   timeZones: string[];
 }) {
-  const [state, action, pending] = useActionState(updateCompany, null);
+  const { state, pending, onSubmit } = useFormAction(updateCompany);
   useActionToast(state, "Company settings saved");
   const errors = state?.ok === false ? state.error.fields : undefined;
 
@@ -35,7 +35,7 @@ export function CompanyForm({
   );
 
   return (
-    <form action={action} className="space-y-8">
+    <form onSubmit={onSubmit} className="space-y-8">
       <fieldset className="grid gap-4 md:grid-cols-2">
         <legend className="mb-3 font-medium">Business</legend>
         <div className="md:col-span-2">{text("company_name", "Company name", { required: true })}</div>

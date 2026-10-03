@@ -1073,6 +1073,7 @@ export type Database = {
           is_pinned: boolean
           job_id: string | null
           opportunity_id: string | null
+          shared_with_crew: boolean
           updated_at: string
         }
         Insert: {
@@ -1084,6 +1085,7 @@ export type Database = {
           is_pinned?: boolean
           job_id?: string | null
           opportunity_id?: string | null
+          shared_with_crew?: boolean
           updated_at?: string
         }
         Update: {
@@ -1095,6 +1097,7 @@ export type Database = {
           is_pinned?: boolean
           job_id?: string | null
           opportunity_id?: string | null
+          shared_with_crew?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -1629,7 +1632,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      assign_owner: {
+        Args: { p_opportunity_id: string; p_owner_id: string }
+        Returns: Json
+      }
+      create_lead: { Args: { p: Json }; Returns: Json }
+      log_contact: {
+        Args: {
+          p_opportunity_id: string
+          p_outcome: string
+          p_summary?: string
+          p_type: string
+        }
+        Returns: Json
+      }
+      set_task_status: {
+        Args: {
+          p_status: Database["public"]["Enums"]["task_status"]
+          p_task_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       activity_type:

@@ -220,9 +220,9 @@ export async function seedData(db: Client, users: Record<"admin" | "sales" | "fi
     await db
       .from("notes")
       .insert([
-        { opportunity_id: wonDeal.id, customer_id: wonDeal.customer_id, author_id: users.sales, body: "Customer prefers morning arrivals. Dog in back yard." },
-        { opportunity_id: inspectionDeal.id, customer_id: inspectionDeal.customer_id, author_id: users.sales, body: "Leak over the kitchen after heavy rain." },
-        { opportunity_id: estimateDeal.id, customer_id: estimateDeal.customer_id, author_id: users.sales, body: "Comparing with one other quote." },
+        { opportunity_id: wonDeal.id, customer_id: wonDeal.customer_id, author_id: users.sales, body: "Customer prefers morning arrivals. Dog in back yard.", shared_with_crew: true },
+        { opportunity_id: inspectionDeal.id, customer_id: inspectionDeal.customer_id, author_id: users.sales, body: "Leak over the kitchen after heavy rain.", shared_with_crew: true },
+        { opportunity_id: estimateDeal.id, customer_id: estimateDeal.customer_id, author_id: users.sales, body: "Comparing with one other quote.", shared_with_crew: false },
       ])
       .select("id"),
     "notes",

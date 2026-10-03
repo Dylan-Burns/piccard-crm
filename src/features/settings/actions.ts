@@ -206,3 +206,59 @@ export async function updateCompany(_prev: ActionResult | null, formData: FormDa
   revalidatePath("/", "layout");
   return ok();
 }
+
+// ---------------------------------------------------------------------------
+// Lead sources (admin)
+// ---------------------------------------------------------------------------
+
+/** The webhooks look these up by name (spec §2.2), so they cannot be renamed or removed. */
+const PROTECTED_SOURCES = ["Website", "Google Ads"];
+
+export async function addLeadSource(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const me = await currentProfileWithRole("admin");
+  if (!me) return NOT_ALLOWED;
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name || name.length > 60) return fail("invalid", "Check the name", { name: "Enter a name up to 60 characters" });
+
+  const supabase = await createClient();
+  const { data: last } = await supabase.from("lead_sources").select("sort_order").order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await supabase.from("lead_sources").insert({ name, sort_order: (last?.sort_order ?? 0) + 10 });
+  if (error) return fail("invalid", "Check the name", { name: error.code === "23505" ? "That source already exists" : "Could not add the source" });
+  revalidatePath("/settings/lead-sources");
+  return ok();
+}
+
+export async function updateLeadSource(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const me = await currentProfileWithRole("admin");
+  if (!me) return NOT_ALLOWED;
+  const id = String(formData.get("id") ?? "");
+  const intent = String(formData.get("intent") ?? "");
+  const supabase = await createClient();
+  const { data: sources } = await supabase.from("lead_sources").select("id, name, is_active, sort_order").order("sort_order");
+  const index = (sources ?? []).findIndex((s) => s.id === id);
+  const source = sources?.[index];
+  if (!sources || !source) return fail("not_found", "Source not found");
+
+  if (intent === "toggle") {
+    if (PROTECTED_SOURCES.includes(source.name)) return fail("protected", `${source.name} is used by automatic lead capture and stays on`);
+    const { error } = await supabase.from("lead_sources").update({ is_active: !source.is_active }).eq("id", id);
+    if (error) return fail("update_failed", "Could not update the source");
+  } else if (intent === "rename") {
+    if (PROTECTED_SOURCES.includes(source.name)) return fail("protected", `${source.name} cannot be renamed`);
+    const name = String(formData.get("name") ?? "").trim();
+    if (!name || name.length > 60) return fail("invalid", "Enter a name up to 60 characters");
+    const { error } = await supabase.from("lead_sources").update({ name }).eq("id", id);
+    if (error) return fail("update_failed", error.code === "23505" ? "That source already exists" : "Could not rename the source");
+  } else if (intent === "up" || intent === "down") {
+    const other = sources[intent === "up" ? index - 1 : index + 1];
+    if (!other) return ok();
+    // Swap positions. Two single-row writes; a failure between them only leaves two rows tied.
+    const a = await supabase.from("lead_sources").update({ sort_order: other.sort_order }).eq("id", source.id);
+    const b = await supabase.from("lead_sources").update({ sort_order: source.sort_order }).eq("id", other.id);
+    if (a.error || b.error) return fail("update_failed", "Could not reorder");
+  } else {
+    return fail("invalid", "Unknown action");
+  }
+  revalidatePath("/settings/lead-sources");
+  return ok();
+}
