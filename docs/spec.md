@@ -8,7 +8,7 @@ Dylan is building a custom CRM for a small roofing and renovation company. Piped
 
 **Outcome wanted:** a buildable v1 spec plus a phased plan, granular enough for a less capable model (Opus 5.5) to execute without re-deciding anything.
 
-**Revision 2 (2026-10-03).** Revised after an external review (Codex) and the first Phase 1 implementation pass. Changes: database privilege lockdown (private helper schema, empty `search_path`, default-deny function grants, column-level grants so lifecycle columns change only through RPCs — §2.10, §3); narrower lead dedupe (§6.5); store-first webhooks with server-side secrets and early rate limiting (§6.5); retryable email log (§2.7, §6.4); a staging Supabase project for previews (§1.5); progress invoices cut (§7.5); speed-to-lead and rep attribution columns (§2.4, §8); additional atomic RPCs (§4.6); client-side estimate view tracking (§7.4); owner decision gates before Phases 9, 12, 13 (§11); phases defined by acceptance criteria rather than session count (§9).
+**Revision 2 (2026-10-03).** Revised after an external review (Codex) and the first Phase 1 implementation pass. Changes: database privilege lockdown (private helper schema, empty `search_path`, default-deny function grants, column-level grants so lifecycle columns change only through RPCs — §2.10, §3); narrower lead dedupe (§6.5); store-first webhooks with server-side secrets and early rate limiting (§6.5); retryable email log (§2.7, §6.4); a staging Supabase project for previews (§1.5); progress invoices cut (§7.5); speed-to-lead and rep attribution columns (§2.4, §8); additional atomic RPCs (§4.6); client-side estimate view tracking (§7.4); owner decision gates before Phases 9, 12, 13 (§11); phases defined by acceptance criteria rather than session count (§9). **Revision 2.1** (final pass): global default-privilege revoke for `PUBLIC`; line items saved through `save_estimate_lines`; `possible_duplicate_of` moved to the opportunity; lead and email retries moved to TypeScript cron routes; import stage rules; sent-estimate lock covers inserts; OAuth on production and localhost only; Vercel deployment protection and `RedirectTo`-based auth email links.
 
 **How this plan is used**
 1. This file lives in the repo as `docs/spec.md`; §10 is `CLAUDE.md`.
@@ -102,9 +102,9 @@ Specific problems in the original chain and the decision for each:
 - **Supabase** for Postgres, Auth (email + password, invite-only, public signup disabled), and Storage. "PostgreSQL + Supabase" in the original list is one thing, not two.
 - **No ORM.** `supabase-js` with generated types. Schema lives in `supabase/migrations/*.sql`.
 - **Multi-step writes are Postgres functions (RPC)**, because `supabase-js` has no client-side transactions and the lifecycle rules must be atomic. TypeScript server actions validate input, call one RPC, and revalidate.
-- **The database is the authorization layer, in three parts** (§2.10, §3): Row Level Security decides which rows a role can touch; column-level privileges decide which columns can be written directly; lifecycle columns (stages, statuses, won/lost fields, totals) are writable only through `security definer` RPCs. A user calling the Supabase API directly must not be able to do anything the UI cannot. The service-role key is used only in webhooks, cron routes, integration workers, the public estimate page, storage URL signing, and user administration (invite, deactivate).
+- **The database is the authorization layer, in three parts** (§2.10, §3): Row Level Security decides which rows a role can touch; column-level privileges decide which columns can be written directly; lifecycle columns (stages, statuses, won/lost fields, totals) are writable only through `security definer` RPCs. A user calling the Supabase API directly must not be able to do anything the UI cannot. The service-role key is used only in webhooks, cron routes, integration workers, the public estimate page, storage URL signing, user administration (invite, deactivate), and admin-gated integration settings.
 - **Function security** (Supabase guidance): internal helpers live in a `private` schema that the Data API does not expose; every `security definer` function uses `set search_path = ''` and schema-qualifies every object (`public.profiles`, `auth.uid()`); `execute` on functions is revoked from `public`, `anon`, and `authenticated` by default and granted explicitly per callable RPC.
-- **Environments**: two Supabase projects. `piccard-crm` (production) backs the Vercel Production environment; `piccard-crm-staging` backs every Vercel Preview deployment. Migrations are applied to staging from the phase branch and to production only after merge to `main`. Production data is never used for testing. OAuth callbacks (Phases 12–13) are registered for the production domain and a stable staging URL (`piccard-crm-git-staging-<team>.vercel.app`, from a long-lived `staging` branch).
+- **Environments**: two Supabase projects. `piccard-crm` (production) backs the Vercel Production environment; `piccard-crm-staging` backs every Vercel Preview deployment. Migrations are applied to staging from the phase branch and to production only after merge to `main`. Production data is never used for testing. OAuth callbacks (Phases 12–13) are registered for exactly two origins: the production domain and `http://localhost:3000`. Integrations are developed and tested locally (Google test account, Intuit sandbox) and verified once in production; they are not exercised on preview URLs, which change per branch.
 - **Money is integer cents.** The prototype used floats; that is the first thing to not repeat.
 - **PDFs** with `@react-pdf/renderer` in a Node route handler. **Email** with Resend + React Email. **Drag and drop** with `@dnd-kit`. **Validation** with zod. **Phone parsing** with `libphonenumber-js`. **Dates** with `date-fns` + `date-fns-tz`.
 - **Background work**: Vercel Cron hitting `/api/cron/*` routes guarded by `CRON_SECRET`, plus `after()` from `next/server` to process the outbox right after a user action. Sub-daily cron and commercial use require the Vercel Pro plan; until Pro is enabled, `after()` is the primary trigger and every cron route must also be safely callable by hand.
@@ -130,8 +130,14 @@ revoke all on schema private from public, anon;
 grant usage on schema private to authenticated, service_role;
 
 -- Default-deny: functions created by the migration role are executable by nobody until granted.
-alter default privileges in schema public  revoke execute on functions from public, anon, authenticated;
-alter default privileges in schema private revoke execute on functions from public, anon, authenticated;
+-- PUBLIC's EXECUTE on new functions is a *global* default: a per-schema revoke does not remove it,
+-- so it is revoked globally for the migration role. Supabase's own per-schema grants to the API
+-- roles are then revoked per schema.
+alter default privileges for role postgres revoke execute on functions from public;
+alter default privileges for role postgres in schema public  revoke execute on functions from anon, authenticated;
+alter default privileges for role postgres in schema private revoke execute on functions from anon, authenticated;
+-- Belt and braces: every function definition in a migration is still followed by an explicit
+-- `revoke execute on function … from public, anon, authenticated;` before its grants.
 
 create type user_role            as enum ('admin','sales','field');
 create type opportunity_stage    as enum ('new','contacted','qualified','inspection_scheduled',
@@ -309,6 +315,7 @@ create table opportunities (
   lost_notes          text,
   closed_owner_id     uuid references profiles(id) on delete set null,  -- owner snapshot at won/lost
   closed_by           uuid references profiles(id) on delete set null,  -- who marked it won/lost (null = customer/system)
+  possible_duplicate_of uuid references opportunities(id) on delete set null,  -- set by create_lead; cleared by "Keep both"
   created_by          uuid references profiles(id) on delete set null,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
@@ -342,7 +349,6 @@ create table lead_submissions (
   source_ip      inet,                                -- for rate limiting (§6.5)
   customer_id    uuid references customers(id) on delete set null,
   opportunity_id uuid references opportunities(id) on delete set null,
-  possible_duplicate_of uuid references opportunities(id) on delete set null,
   error          text,
   attempts       integer not null default 0,
   received_at    timestamptz not null default now(),
@@ -691,7 +697,7 @@ All trigger functions are in schema `private` and follow the function convention
 | `fill_parent_ids` (before insert or update, security definer) | notes, files, activities, tasks, appointments | If `job_id` is set, copy `opportunity_id`, `customer_id` (and `property_id` for appointments) from the job. Else if `opportunity_id` is set, copy `customer_id` (and `property_id` for appointments, only when null) from the opportunity. For notes, files, activities, appointments: raise if `customer_id` is still null. |
 | `track_stage_change` (before insert or update of `stage` on `opportunities`) + `log_stage_history` (after insert or update of `stage`, security definer) | opportunities | Before: on update where stage changed, set `stage_entered_at = now()`. After: write `opportunity_stage_history` — `(null → stage)` on insert, `(old → new, auth.uid())` on change. |
 | `recalc_estimate_totals` (after insert, update, delete on `estimate_line_items`; after update of `discount_cents, tax_rate, deposit_percent` on `estimates`; security definer, because users cannot write total columns) | estimates | Recomputes totals per §7.2. Guard against recursion with `pg_trigger_depth()`. |
-| `lock_sent_estimate` (before update or delete on `estimate_line_items`; before update on `estimates`) | estimates | If the estimate's status is not `draft`, reject changes to line items and to `title, scope_notes, terms, discount_cents, tax_rate, deposit_percent, valid_until`. Status and timestamp columns remain updatable. |
+| `lock_sent_estimate` (before insert, update, or delete on `estimate_line_items`; before update on `estimates`) | estimates | If the estimate's status is not `draft`, reject changes to line items and to `title, scope_notes, terms, discount_cents, tax_rate, deposit_percent, valid_until`. Status and timestamp columns remain updatable. |
 | `note_activity` (after insert on `notes`, security definer) | notes | Inserts an activity `note_added` with summary `'<author name> added a note'` and `metadata.note_id`. (Activities have no insert privilege for users; only definer code writes them.) |
 | `mark_calendar_pending` (before insert or update of `starts_at, ends_at, status, assigned_to, title, notes, all_day` on `appointments`) + `enqueue_calendar_sync` (after, same columns, security definer) | appointments | Only when a `google_calendar` connection with status `connected` exists. Before: set `new.google_sync_status = 'pending'`. After: `insert into public.sync_outbox (provider, entity_type, entity_id) values ('google_calendar','appointment',new.id) on conflict do nothing`. (Setting the status in a before trigger avoids an after trigger updating its own row.) |
 
@@ -719,12 +725,12 @@ alter table tasks     alter column created_by set default auth.uid();
 | lead_sources | ✓ | name, sort_order | name, is_active, sort_order | ✓ | |
 | customers | ✓ | first_name, last_name, company_name, email, phone, phone_e164, secondary_phone, preferred_contact, billing_* | same as insert + archived_at | ✓ | |
 | properties | ✓ | customer_id, label, address_line1, address_line2, city, state, postal_code, roof_type, stories, access_notes, is_primary | same as insert minus customer_id | ✓ | |
-| opportunities | ✓ | — | title, work_type, description, property_id, source_id, source_detail, estimated_value_cents, is_insurance_claim, insurance_carrier, claim_number, adjuster_name, adjuster_phone, deductible_cents | ✓ | `create_lead`, `change_opportunity_stage`, `assign_owner`, `log_contact`, `mark_opportunity_won/lost`, `reopen_opportunity` |
+| opportunities | ✓ | — | title, work_type, description, property_id, source_id, source_detail, estimated_value_cents, is_insurance_claim, insurance_carrier, claim_number, adjuster_name, adjuster_phone, deductible_cents, possible_duplicate_of | ✓ | `create_lead`, `change_opportunity_stage`, `assign_owner`, `log_contact`, `mark_opportunity_won/lost`, `reopen_opportunity` |
 | opportunity_stage_history | ✓ | — | — | — | triggers |
 | lead_submissions | ✓ | — | — | — | webhooks (service role) |
 | price_book_items | ✓ | name, description, unit, unit_price_cents, is_taxable | same + is_active | ✓ | |
 | estimates | ✓ | — | title, scope_notes, terms, discount_cents, tax_rate, deposit_percent, valid_until | ✓ | `create_estimate`, `mark_estimate_sent`, `revise_estimate`, `void_estimate`, public-page RPCs |
-| estimate_line_items | ✓ | estimate_id, sort_order, name, description, quantity, unit, unit_price_cents, is_taxable | same minus estimate_id | ✓ | edits blocked unless draft (§2.9) |
+| estimate_line_items | ✓ | — | — | — | `save_estimate_lines` (PostgREST upsert would need insert on `id` and update on `estimate_id`; one RPC is also atomic and recalculates totals once) |
 | jobs | ✓ | — | title, permit_status, permit_number, warranty_years, scope_summary | ✓ | `mark_opportunity_won`, `schedule_job`, `set_job_status` |
 | job_assignments | ✓ | job_id, user_id | — | ✓ | |
 | appointments | ✓ | — | title, notes | ✓ | `schedule_appointment`, `reschedule_appointment`, `cancel_appointment`, `complete_appointment`, `schedule_job` |
@@ -895,7 +901,8 @@ create policy estimates_select on estimates for select to authenticated using ((
 create policy estimates_update on estimates for update to authenticated using ((select private.is_staff())) with check ((select private.is_staff()));
 -- inserts: create_estimate / revise_estimate (security definer)
 create policy estimates_delete on estimates for delete to authenticated using ((select private.is_admin()) and status = 'draft');
-create policy estimate_lines_all on estimate_line_items for all to authenticated using ((select private.is_staff())) with check ((select private.is_staff()));
+create policy estimate_lines_select on estimate_line_items for select to authenticated using ((select private.is_staff()));
+-- writes: save_estimate_lines (security definer)
 
 -- jobs
 create policy jobs_select on jobs for select to authenticated
@@ -1060,7 +1067,7 @@ All return `jsonb` shaped `{ok:true, …}` or `{ok:false, code, message, missing
 | Function | Guard | Purpose |
 |---|---|---|
 | `create_lead(p jsonb)` | staff or service role | Dedupe + create customer / property / opportunity (§6.5). For `channel = 'manual'` it never auto-merges. |
-| `process_lead_submission(p_submission_id uuid)` | service role only | Normalized payload already stored in `lead_submissions` → `create_lead` → record the outcome on the submission (§6.5). Idempotent: a submission not in `received`/`error` is returned as-is. |
+| `process_lead_submission(p_submission_id uuid, p_lead jsonb)` | service role only | `p_lead` is the `LeadInput` normalized in TypeScript. Calls `create_lead`, then records the outcome (`status`, ids, `processed_at`, `attempts + 1`) on the submission (§6.5). Idempotent: a submission not in `received`/`error` is returned as-is. |
 | `log_contact(p_opportunity_id, p_type, p_outcome, p_summary)` | staff | `p_type` ∈ call, email, sms; `p_outcome` ∈ connected, left_voicemail, no_answer, sent. Writes the activity and applies §4.1 automation. |
 | `assign_owner(p_opportunity_id, p_owner_id)` | staff | New owner must be an active admin or sales user. Updates `owner_id`, reassigns open automatic tasks, logs `owner_changed`. |
 | `change_opportunity_stage(p_opportunity_id, p_to_stage)` | staff | Open stages only; rejects `won`/`lost` with `code:'use_dedicated_action'`. Checks the entry gate, updates, runs entry automation, logs `stage_changed`. |
@@ -1075,6 +1082,7 @@ All return `jsonb` shaped `{ok:true, …}` or `{ok:false, code, message, missing
 | `register_files(p jsonb)` | staff, or `private.field_can_access_opportunity` | Inserts N `files` rows and **one** activity `files_uploaded` ("12 photos uploaded"). |
 | `create_estimate(p_opportunity_id, p_title)` | staff | Inserts a draft with tax rate, deposit percent, terms, and valid-until copied from `company_settings`; logs `estimate_created`. |
 | `mark_estimate_sent(p_estimate_id, p_email, p_pdf_path)` | staff | §7.4. |
+| `save_estimate_lines(p_estimate_id, p_lines jsonb)` | staff | Draft estimates only. Replaces the estimate's lines with `p_lines` (name, description, quantity, unit, unit_price_cents, is_taxable; order = array order) in one transaction; totals recalculate by trigger. |
 | `revise_estimate(p_estimate_id)` | staff | Clones into a new draft with `version + 1`. |
 | `void_estimate(p_estimate_id)` | staff | Only `draft`, `sent`, `viewed`, `expired`. |
 | `record_estimate_view(p_token)`, `accept_estimate(p_token, p_name, p_ip)`, `decline_estimate(p_token, p_reason)` | service role only | Public page actions (§7.4). `accept_estimate` sets name/IP/status then calls `mark_opportunity_won`. |
@@ -1083,7 +1091,7 @@ All return `jsonb` shaped `{ok:true, …}` or `{ok:false, code, message, missing
 | `queue_invoice_sync(p_invoice_id)` | admin | Only `draft` with `qbo_sync_status` in (`not_synced`, `error`). Sets `pending`, enqueues the outbox row. |
 | `record_invoice_manually(p_invoice_id, p_status, p_amount_paid_cents)` | admin | Fallback when QuickBooks is not connected (§6.6 item 7): mark `sent`, or record the paid amount (→ `partially_paid` / `paid`). Logs `payment_received` on payment. |
 | `claim_outbox_batch(p_limit)`, `complete_outbox(p_id)`, `fail_outbox(p_id, p_error)`, `lock_integration(p_provider)` | service role only | §6.1. |
-| `run_nightly_maintenance()` | service role only | Expire estimates, enforce §4.4, retry stuck lead submissions and emails. |
+| `run_nightly_maintenance()` | service role only | Expire estimates, enforce §4.4. (Lead-submission and email retries need TypeScript — phone parsing, Resend — so the cron *routes* do them, not this function.) |
 
 ---
 
@@ -1192,7 +1200,7 @@ Convention for every server action: `"use server"`; parse input with the zod sch
 | appointments | `scheduleAppointment`, `rescheduleAppointment`, `cancelAppointment`, `completeAppointment` (each → its RPC), `updateAppointmentNotes` |
 | files | `createUploadUrls`, `registerFiles` (→ RPC), `getSignedUrls`, `updateFile` (category, caption), `deleteFile` |
 | jobs | `updateJob` (granted columns), `scheduleJob` (→ `schedule_job`), `setJobStatus` (→ RPC), `assignUsers` |
-| estimates | `createEstimate` (→ RPC), `updateEstimate`, `upsertLineItems`, `deleteLineItem`, `sendEstimate`, `reviseEstimate`, `voidEstimate` (→ RPCs) |
+| estimates | `createEstimate` (→ RPC), `updateEstimate`, `saveEstimateLines` (→ `save_estimate_lines`), `sendEstimate`, `reviseEstimate`, `voidEstimate` (→ RPCs) |
 | invoices | `updateInvoiceDueDate`, `regenerateInvoices`, `voidInvoice`, `sendInvoiceToQuickBooks` (→ `queue_invoice_sync`), `recordInvoiceManually` |
 | settings | `updateCompany`, `inviteUser`, `updateUserRole`, `setUserActive`, lead-source and price-book CRUD, `disconnectIntegration`, `retrySync` |
 | public (service client, no session) | `acceptEstimate(token, name)`, `declineEstimate(token, reason)` |
@@ -1347,15 +1355,15 @@ Bounce webhooks are deferred.
 1. Authenticate (constant-time secret comparison) → `401` on failure.
 2. Rate limit: if `lead_submissions` has 10 or more rows from the same `source_ip` in the last minute → `429`.
 3. Parse JSON → `400` if unparseable.
-4. Insert the raw body into `lead_submissions` (status `received`, `source_ip`, `external_id` if derivable, `on conflict (channel, external_id) do nothing`). **If this insert fails (database down), respond `503`** so the sender retries. A conflict means a duplicate delivery → respond `200`.
+4. Insert the raw body into `lead_submissions` (status `received`, `source_ip`, `external_id`, `on conflict (channel, external_id) do nothing`). **If this insert fails (database down), respond `503`** so the sender retries. A conflict means a duplicate delivery → respond `200`.
 5. Respond `200 {ok:true}` — the lead is now durable.
-6. In `after()`: normalize, then call `process_lead_submission(id)`, then send notification emails. Failures set the submission to `error` with the message and are retried by the cron (up to 5 attempts), and appear in Settings → Integrations → "Lead ingestion issues".
+6. In `after()`: normalize, then call `process_lead_submission(id, lead)`, then send notification emails. Failures set the submission to `error` with the message and are retried by the cron routes, which re-normalize the stored raw payload in TypeScript (up to 5 attempts), and appear in Settings → Integrations → "Lead ingestion issues".
 
 **Secrets never reach a browser.** `LEAD_WEBHOOK_SECRET` is used only server-to-server. The website form must post to the website's own backend (a server route, a WordPress form plugin's webhook feature, or a Zapier/Make step), which forwards to the CRM with the header. Settings → Integrations shows server-side setup instructions only; it never offers browser `fetch` code containing the secret.
 
 **Normalized input** (`LeadInput`): `channel, external_id, first_name, last_name, phone, phone_e164, email, address_line1, city, state, postal_code, work_type, message, source_name, source_detail, utm_source, utm_medium, utm_campaign, gclid, owner_id`. TypeScript does the normalization: split a single `name` at the first space; parse phone with `libphonenumber-js` (default region US) into E.164 or null; lowercase and trim email.
 
-**Website form** — `POST /api/webhooks/leads/website`, header `X-Webhook-Secret` = `LEAD_WEBHOOK_SECRET`, JSON body with the fields above plus `website` (honeypot) and optional `submission_id`. Rejected (status `rejected`, 200 returned) when the honeypot is filled or when both phone and email are missing. Source: "Google Ads" when `gclid` is present or `utm_medium` is `cpc`/`ppc`; otherwise "Website". When `submission_id` is absent, `external_id` = SHA-256 of `phone_e164|email|message|UTC date`, so a double-click submit is absorbed.
+**Website form** — `POST /api/webhooks/leads/website`, header `X-Webhook-Secret` = `LEAD_WEBHOOK_SECRET`, JSON body with the fields above plus `website` (honeypot) and optional `submission_id`. Rejected (status `rejected`, 200 returned) when the honeypot is filled or when both phone and email are missing. Source: "Google Ads" when `gclid` is present or `utm_medium` is `cpc`/`ppc`; otherwise "Website". When `submission_id` is absent, `external_id` = SHA-256 of the raw request body plus the UTC date (computed before any parsing, so it never fails), which absorbs a double-click submit.
 
 **Google Ads lead form extension** — `POST /api/webhooks/leads/google-ads`. Google sends JSON containing `google_key`, `lead_id`, `user_column_data[]` (`column_id` values such as `FULL_NAME`, `FIRST_NAME`, `LAST_NAME`, `PHONE_NUMBER`, `EMAIL`, `STREET_ADDRESS`, `CITY`, `POSTAL_CODE`), `gcl_id`, `campaign_id`, `form_id`, `is_test`. Verify `google_key === GOOGLE_ADS_WEBHOOK_KEY` (Google sends the key in the body; the Ads server calls us directly, so it is not exposed to browsers). `external_id = lead_id`. Source "Google Ads", `source_detail` = "form {form_id} / campaign {campaign_id}". Test leads (`is_test: true`) are stored as `rejected` and create nothing.
 
@@ -1367,10 +1375,14 @@ Bounce webhooks are deferred.
    - no address was submitted and the customer has exactly **one** open deal → that deal;
    - otherwise → no merge target.
 4. **Merge target found** (never for `channel = 'manual'`) → create nothing new. Activity `duplicate_inquiry` on that deal; insert the message as a note if present; task `duplicate_inquiry` "Customer contacted us again — call" due in 1 hour for the owner. Outcome `merged_duplicate`.
-5. **No merge target** → reuse the customer; reuse the matched property or insert a new one; insert a new opportunity and run the `new` automation. If the customer has any other open deal, set `possible_duplicate_of` on the submission to the most recent one and add a `system` activity on the new deal: "Possible duplicate of {title} — merge or keep both". The deal page shows a banner with "Keep both" (dismiss) and "Mark as duplicate" (marks the new deal lost with reason `duplicate`). Outcome `created`. A returning customer keeps the source that brought them this time.
+5. **No merge target** → reuse the customer; reuse the matched property or insert a new one; insert a new opportunity and run the `new` automation. If the customer has any other open deal, set `possible_duplicate_of` on the **new opportunity** to the most recent one and add a `system` activity on the new deal: "Possible duplicate of {title} — merge or keep both". The deal page shows a banner with "Keep both" (dismiss) and "Mark as duplicate" (marks the new deal lost with reason `duplicate`). Outcome `created`. A returning customer keeps the source that brought them this time.
 6. Return `{ok:true, status, customer_id, opportunity_id, is_new_customer, possible_duplicate_of}`.
 
 Manual entry calls `create_lead` with `channel = 'manual'` and no `external_id`; it never auto-merges, because the form's live duplicate panel (§5.6) already let the person choose an existing customer or deal.
+
+**Import** (`channel = 'import'`, service role only) differs in three ways: (a) it never auto-merges — a row whose customer and property already have an open deal is **skipped** and reported; (b) `p.import_stage` may name any open stage and is set directly, bypassing entry gates, because historical deals will not have CRM inspections or estimates (`import_stage` is rejected for every other channel); (c) instead of stage automation it creates one task, `imported_review` "Imported deal — confirm stage and next step", due +1 day for the owner, and sends no emails.
+
+Work type and a time window are deliberately **not** part of the merge rule: customer + property is the smallest rule that never merges two real jobs, and anything it misses surfaces as a "possible duplicate" banner for a human to decide.
 
 ### 6.6 The integration most likely to consume disproportionate time: QuickBooks
 
@@ -1391,7 +1403,7 @@ Containment, all already reflected above:
 | Route | Schedule (UTC cron; adjust to business timezone) | Work |
 |---|---|---|
 | `/api/cron/process-outbox` | `*/5 * * * *` | Drain the outbox. |
-| `/api/cron/nightly` | `0 8 * * *` | `run_nightly_maintenance()` (expire estimates, enforce §4.4); re-assert Google events for the next 60 days. |
+| `/api/cron/nightly` | `0 8 * * *` | `run_nightly_maintenance()` (expire estimates, enforce §4.4); retry stuck lead submissions and failed emails; re-assert Google events for the next 60 days. |
 | `/api/cron/qbo-payments` | `15 * * * *` | Payment pull. |
 | `/api/cron/task-digest` | `0 12 * * *` | Daily digest emails. |
 
@@ -1675,7 +1687,7 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 1. `pnpm create next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-pnpm --yes`. Turn on `strict` and `noUncheckedIndexedAccess` in `tsconfig.json`. Add scripts: `typecheck` (`tsc --noEmit`), `test` (`vitest run`), `seed` (`tsx scripts/seed-dev.ts`), `db:types` (`supabase gen types typescript --local > src/types/database.ts`).
 2. `pnpm dlx shadcn@latest init` (Radix base, CSS variables). Add components: button, input, label, textarea, select, dialog, sheet, dropdown-menu, tabs, badge, card, table, sonner, field, checkbox, skeleton, avatar, separator, tooltip, popover, calendar, command (`field` replaces the retired `form`). Replace the theme tokens with slate neutrals and a blue-600 primary (§5.7). Load Inter with `next/font`. Base text size 14px is set on `body`, not `html`, so rem-based sizes (and 44px tap targets) are unaffected.
 3. Install: `@supabase/supabase-js @supabase/ssr zod react-hook-form @hookform/resolvers date-fns date-fns-tz libphonenumber-js lucide-react server-only`; dev: `vitest tsx @playwright/test`.
-4. `supabase init`; in `supabase/config.toml` set `enable_signup = false`, the site URL, and invite/recovery email templates that link to `/auth/confirm?token_hash=…&type=…&next=/set-password`. Write `0001_foundation.sql`: both extensions; the `private` schema and the default-privilege revokes for functions **and** tables (§2.1, §2.10); **every enum in §2.1** (all of them, so later migrations never alter types); `private.set_updated_at`; `profiles`; `company_settings` with its seed row; `private.auth_role`, `private.is_admin`, `private.is_staff` from §3.2 with their grants; triggers `handle_new_user` and `guard_profile_privileges` from §2.9; RLS enable + the `profiles` and `company_settings` policies from §3.3; the §2.10 grants for these two tables.
+4. `supabase init`; in `supabase/config.toml` set `enable_signup = false`, the site URL, and invite/recovery email templates whose link is built from `{{ .RedirectTo }}` (not `{{ .SiteURL }}`), i.e. `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=invite`, where the app passes `redirectTo = <its own origin>/auth/confirm?next=/set-password`. This makes an invite sent from a preview deployment link back to that same deployment. Write `0001_foundation.sql`: both extensions; the `private` schema and the default-privilege revokes for functions **and** tables (§2.1, §2.10); **every enum in §2.1** (all of them, so later migrations never alter types); `private.set_updated_at`; `profiles`; `company_settings` with its seed row; `private.auth_role`, `private.is_admin`, `private.is_staff` from §3.2 with their grants; triggers `handle_new_user` and `guard_profile_privileges` from §2.9; RLS enable + the `profiles` and `company_settings` policies from §3.3; the §2.10 grants for these two tables.
 5. `src/lib/env.ts` (zod-validated environment), `src/lib/supabase/{server,client,admin,proxy}.ts` following the current `@supabase/ssr` cookie pattern (`getAll`/`setAll`), and `src/proxy.ts` that refreshes the session and redirects unauthenticated requests to `/login` for everything except `/login`, `/set-password`, `/auth/*`, `/e/*`, `/api/webhooks/*`, `/api/cron/*`, `/api/public/*`.
 6. `src/lib/auth.ts`: `getSessionProfile()` (cached per request with React `cache`) and `requireRole(...roles)` which redirects field users to `/today` and others to `/dashboard` when the role is not allowed, and signs out a deactivated user. `src/lib/result.ts`: `ActionResult<T>`, `ok()`, `fail()`. `src/lib/safe-redirect.ts`: `safeRedirectPath(next)` resolves `next` against a fixed origin, rejects anything containing `\` or control characters or resolving to another origin, and returns only path + query + hash; every `next`/redirect parameter goes through it (prevents `/\evil.com` open redirects).
 7. Auth screens: `/login` (email + password, error states, "Forgot password" sending a reset email), `/auth/confirm` route exchanging `token_hash` + `type`, `/set-password`.
@@ -1683,7 +1695,7 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 9. Settings: `/settings/profile` (name, phone, change password); `/settings/users` (admin: list, invite by email with name and role via `auth.admin.inviteUserByEmail` then set the role on the profile with the service client, change role, deactivate/reactivate — deactivation sets `is_active = false` **and** bans the auth user so sessions cannot refresh; admins cannot change or deactivate themselves); `/settings/company` (all `company_settings` fields, timezone select, logo upload deferred to Phase 7).
 10. `scripts/seed-dev.ts`: with the service client against **local** Supabase, create `admin@test.local`, `sales@test.local`, `field@test.local` (password `Password123!`), and set their roles. Refuse to run when the URL is not localhost.
 11. Tests: unit tests for `result.ts`, `env.ts`, and `safe-redirect.ts` (including `/\evil.com`, `//evil.com`, `https://evil.com`, encoded variants); `tests/rls/profiles.test.ts` proving a sales user cannot change their own role or `email`, an admin can change another user's role, a deactivated user can read only their own profile row, and `anon` cannot execute `private.auth_role()`.
-12. Link the Vercel project; Production env vars point at the production Supabase project, Preview env vars at staging. Push migrations to staging (`supabase db push`) and deploy the branch preview. Set each project's Auth site URL and redirect allow-list, and its invite/recovery email templates (same content as `supabase/templates/`). In each project create the first admin: invite the owner from the Supabase dashboard, then `update public.profiles set role = 'admin' where email = '<owner email>'` in the SQL editor. Record all of this in `docs/decisions.md`.
+12. Link the Vercel project; Production env vars point at the production Supabase project, Preview env vars at staging. Push migrations to staging (`supabase db push`) and deploy the branch preview. Set each project's Auth site URL and redirect allow-list, and its invite/recovery email templates (same content as `supabase/templates/`). In each project create the first admin: invite the owner from the Supabase dashboard, then `update public.profiles set role = 'admin' where email = '<owner email>'` in the SQL editor. Record all of this in `docs/decisions.md`. **Vercel Deployment Protection:** the project currently requires a Vercel login on every non-custom domain, including production's `.vercel.app` URL, which would block staff, webhooks, and the public estimate page. Set protection to preview deployments only (or attach the custom domain). On protected previews, test webhooks and `/e/*` with a protection-bypass token or locally. Add each project's redirect allow-list: production origin, `http://localhost:3000/**`, and for staging the team's preview pattern `https://*-<team-slug>.vercel.app/**`.
 
 **Acceptance**
 - Unauthenticated visit to `/dashboard` redirects to `/login`.
@@ -1721,7 +1733,7 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 **Acceptance**
 - `supabase db reset` applies all three migrations with no error; `pnpm seed` completes.
 - Every RLS and trigger test passes.
-- Consistency check performed and recorded in `docs/decisions.md`: every foreign key target exists; every policy references existing columns; `select tablename from pg_tables where schemaname='public' and not rowsecurity` returns zero rows; `select proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public','private') and p.prosecdef and not (p.proconfig @> array['search_path=""'])` returns zero rows.
+- Consistency check performed and recorded in `docs/decisions.md`: every foreign key target exists; every policy references existing columns; `select tablename from pg_tables where schemaname='public' and not rowsecurity` returns zero rows; `select proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public','private') and (p.proconfig is null or not (p.proconfig @> array['search_path=""']))` returns zero rows.
 - Standard gate passes.
 
 **Kickoff prompt:** "[preamble] Branch `phase-02-schema`. Implement spec §9 Phase 2, steps 1–7. Copy DDL from §2 and policies from §3.3 exactly; do not rename anything. The trigger behaviors are specified in §2.9 and the totals formula in §7.2."
@@ -1793,10 +1805,10 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 2. Email templates: `NewLeadEmail`, `DuplicateInquiryEmail`. Plain, with a button linking to the deal.
 3. `features/leads/normalize.ts`: `normalizeWebsiteLead(body)` and `normalizeGoogleAdsLead(body)` returning `LeadInput` (§6.5). Unit tests with fixture payloads, including a Google payload using `FULL_NAME` only and one using `FIRST_NAME`/`LAST_NAME`.
 4. The two route handlers following the six-step durability rule in §6.5 exactly: constant-time secret check, per-IP rate limit, parse, **store raw first** (503 if that fails), 200, then process in `after()`.
-5. Retry path: `/api/cron/process-outbox` (and `run_nightly_maintenance`) re-run `process_lead_submission` for rows in `received` older than 2 minutes or `error` with `attempts < 5`, and retry failed emails. Callable by hand with `CRON_SECRET` until Vercel Pro is enabled.
+5. Retry path: `/api/cron/process-outbox` and `/api/cron/nightly` (TypeScript, shared helper `retryLeadSubmissions()`) re-normalize and re-run `process_lead_submission` for rows in `received` older than 2 minutes or `error` with `attempts < 5`, and retry failed emails. Callable by hand with `CRON_SECRET` until Vercel Pro is enabled.
 6. Call `sendEmail` for new leads created manually too (from the `createLead` action).
 7. `/settings/integrations`: a "Lead sources" card showing both webhook URLs, the Google Ads setup instructions (webhook URL + key), and **server-side** website setup instructions (forward from the website's backend, a WordPress form plugin's webhook, or Zapier/Make — never browser code containing the secret); a "Send test lead" button (server action); and a table of the last 20 submissions with status, error, and a Retry button.
-8. **Import script** `scripts/import-csv.ts` (command line, no UI): reads a CSV of customers with optional property and open deal (stage, owner email, value, source), dry-run by default, `--commit` to write; each row goes through `create_lead` with `channel = 'import'` and automation emails suppressed; prints a summary of created / merged / skipped rows. Run against staging first, then production.
+8. **Import script** `scripts/import-csv.ts` (command line, no UI): reads a CSV of customers with optional property and open deal (stage, owner email, value, source), dry-run by default, `--commit` to write; each row goes through `create_lead` with `channel = 'import'` and `import_stage` (rules in §6.5: no auto-merge, gates bypassed, one review task, no emails); prints a summary of created / merged / skipped rows. Run against staging first, then production.
 9. Tests: route handler tests for 401 on bad secret, 429 after 10 requests a minute, 503 when the store step fails (mock), 200 + `rejected` on honeypot, 200 + `created`, replay of the same `lead_id` creating nothing, a submission left in `received` being processed by the retry route, and an email that failed once being sent on retry exactly once.
 10. Pilot checklist recorded in `docs/decisions.md`: Vercel Pro enabled; secrets set in Vercel; Resend domain verified; website backend forwarding configured; test lead sent to production; import run; real users invited.
 
@@ -1895,13 +1907,13 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 ### Phase 9 — Estimate builder and PDF
 
 **Goal:** staff build an estimate from the price book and download a professional PDF.
-**Tables used:** price_book_items, estimates, estimate_line_items. **Migration:** `0010_estimate_rpcs.sql` (`create_estimate`, `void_estimate`).
+**Tables used:** price_book_items, estimates, estimate_line_items. **Migration:** `0010_estimate_rpcs.sql` (`create_estimate`, `save_estimate_lines`, `void_estimate`).
 **Decision gate (before starting):** the owner has confirmed in writing (recorded in `docs/decisions.md`) the tax rule and rate, deposit percent, estimate validity, warranty length, estimate terms text, and how pricing works today (§11 questions 1–4). Do not start the phase on defaults.
 **Screens:** `/settings/price-book`, Estimates panel on the deal, `/opportunities/[id]/estimates/[estimateId]`.
 
 **Steps**
 1. `/settings/price-book`: CRUD table (name, description, unit, price, taxable, active).
-2. `0010_estimate_rpcs.sql` with `create_estimate` (copies tax rate, deposit percent, terms, valid-until from settings; title defaults to the deal title; logs `estimate_created`) and `void_estimate`. `features/estimates`: `createEstimate`, `updateEstimate` (granted columns only), `upsertLineItems`, `deleteLineItem`, `voidEstimate`; queries.
+2. `0010_estimate_rpcs.sql` with `create_estimate` (copies tax rate, deposit percent, terms, valid-until from settings; title defaults to the deal title; logs `estimate_created`) , `save_estimate_lines`, and `void_estimate`. `features/estimates`: `createEstimate`, `updateEstimate` (granted columns only), `saveEstimateLines`, `voidEstimate`; queries.
 3. `features/estimates/totals.ts` implementing §7.2, with a unit test over fixtures and an integration test asserting the same fixtures produce the same numbers from the database trigger.
 4. Builder page: header fields; line list with add-from-price-book (searchable `Command` popover) and add-custom; inline edit of quantity and price; reorder with up/down buttons; live totals panel; read-only rendering when status is not `draft`. On mobile each line is a card and the totals bar is sticky at the bottom.
 5. Install `@react-pdf/renderer`. `EstimateDocument.tsx` per §7.3 and `GET /api/estimates/[id]/pdf` (staff only, Node runtime). Display numbers as `E-1001` / `E-1001-v2`.
@@ -1924,11 +1936,11 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 **Screens:** `/e/[token]`; send / revise controls in the builder.
 
 **Steps**
-1. `0011_estimate_lifecycle.sql`: `mark_estimate_sent`, `revise_estimate`, `record_estimate_view`, `accept_estimate`, `decline_estimate` (§7.4, §4.1 events), and `run_nightly_maintenance` (§4.1 expiry, §4.4 invariant, lead-submission and email retries). Public RPCs are executable by `service_role` only.
+1. `0011_estimate_lifecycle.sql`: `mark_estimate_sent`, `revise_estimate`, `record_estimate_view`, `accept_estimate`, `decline_estimate` (§7.4, §4.1 events), and `run_nightly_maintenance` (§4.1 expiry, §4.4 invariant). Public RPCs are executable by `service_role` only.
 2. `sendEstimate` action following the exact order in §7.4. `EstimateEmail` template with the public link. "Resend email" and "Copy link" controls.
-3. `/e/[token]` per §7.4 using the service client; rendering never changes status; a client script posts to `POST /api/public/estimates/[token]/view` after 2 seconds visible; server actions `acceptEstimate` and `declineEstimate` (rate limited per IP); states for void, expired, accepted, declined; "approve" wording. `GET /api/public/estimates/[token]/pdf` redirecting to a 5-minute signed URL of `pdf_path`. `Cache-Control: no-store` and `X-Robots-Tag: noindex` on every `/e/*` and `/api/public/*` response.
+3. `/e/[token]` per §7.4 using the service client; rendering never changes status; a client script posts to `POST /api/public/estimates/[token]/view` after 2 seconds visible; server actions `acceptEstimate` and `declineEstimate` (no rate limit: they require an unguessable 122-bit token and are idempotent state changes); states for void, expired, accepted, declined; "approve" wording. `GET /api/public/estimates/[token]/pdf` redirecting to a 5-minute signed URL of `pdf_path`. `Cache-Control: no-store` and `X-Robots-Tag: noindex` on every `/e/*` and `/api/public/*` response.
 4. Notification emails to the deal owner on accept and decline; "Deal won" email to admins.
-5. `/api/cron/nightly` calling `run_nightly_maintenance()`; add its cron entry.
+5. `/api/cron/nightly` calling `run_nightly_maintenance()`, then `retryLeadSubmissions()` and `retryEmails()`; add its cron entry.
 6. Wire the pipeline's Won dialog to list the deal's sent estimates.
 7. Tests: sending moves the deal to `estimate_sent`, sets `estimated_value_cents`, creates the PDF `files` row and the follow-up task; sending a revision voids the previous version and moves the deal to `negotiation`; accepting by token sets name and IP, wins the deal, creates the job and the invoices, and voids other estimates; accepting twice is a no-op; a void token cannot be accepted; a server-side GET of `/e/[token]` (no script execution) leaves the estimate `sent`; nightly expires a past-due estimate and creates a `stale_deal` task for an open deal with no next step.
 8. Playwright `e2e/estimate.spec.ts`: build, send, open the public link in a fresh context, accept, and assert the job exists.
@@ -1968,7 +1980,7 @@ plus: `supabase db push` to the **staging** project succeeds; the phase's accept
 
 **Goal:** every CRM appointment appears on the company Google calendar and stays correct.
 **Tables used:** integration_connections, sync_outbox, appointments. **Migration:** `0013_outbox_rpcs.sql`.
-**Decision gate (before starting):** the owner has confirmed (in `docs/decisions.md`) which Google account connects, whether it is Google Workspace (Internal consent screen) or Gmail (published app), and who needs events on their calendar (§11 question 8). OAuth redirect URIs are registered for production and the stable staging URL (§1.5).
+**Decision gate (before starting):** the owner has confirmed (in `docs/decisions.md`) which Google account connects, whether it is Google Workspace (Internal consent screen) or Gmail (published app), and who needs events on their calendar (§11 question 8). OAuth redirect URIs are registered for production and `http://localhost:3000` (§1.5).
 
 **Steps**
 1. `0013_outbox_rpcs.sql`: `claim_outbox_batch`, `complete_outbox`, `fail_outbox`, and `lock_integration(provider)` (advisory lock) per §6.1; service role only.
@@ -2067,7 +2079,7 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 1. **Do not change the schema, RLS policies, or lifecycle rules** defined in `docs/spec.md` §2–§4. If they cannot be implemented as written, stop and ask.
 2. **Migrations are append-only.** New numbered file in `supabase/migrations/`; never edit an applied migration.
 3. **The database is the authorization layer.** Every table has RLS enabled (which rows), column-level grants (which columns, spec §2.10), and lifecycle columns are writable only through RPCs. Use the user-scoped client (`lib/supabase/server.ts`) for all user-initiated reads and writes. A direct write that hits `permission denied` means you need the RPC, not a broader grant.
-4. **The service-role client (`lib/supabase/admin.ts`) is allowed only in:** webhook routes, cron routes, integration workers, the public estimate page and its actions, storage URL signing, and user administration (invite, deactivate). It imports `server-only`.
+4. **The service-role client (`lib/supabase/admin.ts`) is allowed only in:** webhook routes, cron routes, integration workers, the public estimate page and its actions, storage URL signing, user administration (invite, deactivate), and admin-gated integration settings (connection status, disconnect, retry). It imports `server-only`.
 5. **Multi-step writes are Postgres RPCs**, never several sequential supabase-js calls. A server action validates with zod, calls one RPC (or one simple write), revalidates, and returns `ActionResult<T>`.
 6. **RPCs return `{ok:false, code, …}` for business-rule failures** and raise only for authorization failures. Function rules (spec §2.1): helpers and triggers in schema `private`, callable RPCs in `public`; every function has `set search_path = ''` and schema-qualifies every name; every `security definer` RPC begins with an authorization guard; execute is default-denied, so each RPC is followed by an explicit `grant execute … to authenticated` (or `service_role`).
 7. **Money is integer cents** in columns ending `_cents`. Format only at the edge with `lib/money.ts`. Never use floats for money.
