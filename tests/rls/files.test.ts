@@ -178,14 +178,24 @@ describe("content types", () => {
     if (!disguised.ok) throw new Error(disguised.error.message);
     await put(disguised.data.uploads[0]!, "image/png", Buffer.from("<html><script>alert(1)</script></html>"));
     expect(await registerUploadedFiles(sales, { opportunityId: dealId, files: toRegister(disguised.data.uploads) })).toMatchObject({ ok: false, error: { code: "invalid" } });
-    expect((await service.storage.from(BUCKET).exists(disguised.data.uploads[0]!.storagePath)).data).toBe(false);
+    expect((await service.from("files").select("id").eq("id", disguised.data.uploads[0]!.id)).data).toEqual([]);
+
+    // Calling the RPC directly cannot skip the content check: the object was never marked as inspected
+    const direct = { opportunity_id: dealId, files: [{ id: disguised.data.uploads[0]!.id, storage_path: disguised.data.uploads[0]!.storagePath, file_name: "x.png", mime_type: "image/png", size_bytes: 10 }] } as Json;
+    expect((await sales.supabase.rpc("register_files", { p: direct })).data).toMatchObject({ ok: false, code: "not_verified" });
+    expect((await sales.supabase.rpc("mark_files_verified", { p_paths: [disguised.data.uploads[0]!.storagePath] })).error?.code).toBe(PERMISSION_DENIED);
+    expect((await field.supabase.rpc("mark_files_verified", { p_paths: [disguised.data.uploads[0]!.storagePath] })).error?.code).toBe(PERMISSION_DENIED);
+    await service.storage.from(BUCKET).remove([disguised.data.uploads[0]!.storagePath]);
 
     // Recorded size comes from storage, not from the caller
-    const honest = await registerUploadedFiles(sales, { opportunityId: dealId, files: [{ ...toRegister([second!], "photo", "application/pdf")[0]!, category: "other" as const, size: 999_999 }] });
+    const pdfSlot = await createUploadSlots(sales, { opportunityId: dealId, files: [{ name: "report.pdf", type: "application/pdf", size: PDF.length }] });
+    if (!pdfSlot.ok) throw new Error(pdfSlot.error.message);
+    const [report] = pdfSlot.data.uploads;
+    await put(report!, "application/pdf");
+    const honest = await registerUploadedFiles(sales, { opportunityId: dealId, files: [{ id: report!.id, storagePath: report!.storagePath, name: "report.pdf", type: "application/pdf", category: "other", size: 999_999 }] });
     expect(honest).toEqual({ ok: true, data: { count: 1 } });
-    expect((await service.from("files").select("size_bytes, mime_type").eq("id", second!.id).single()).data).toEqual({ size_bytes: PDF.length, mime_type: "application/pdf" });
+    expect((await service.from("files").select("size_bytes, mime_type").eq("id", report!.id).single()).data).toEqual({ size_bytes: PDF.length, mime_type: "application/pdf" });
     await service.storage.from(BUCKET).remove([second!.storagePath]);
-    await service.from("files").delete().eq("id", second!.id);
   });
 });
 
@@ -216,6 +226,19 @@ describe("reading, editing, deleting", () => {
     expect((await listFilesFor(field, { opportunityId: dealId })).every((f) => f.category !== "estimate")).toBe(true);
     expect(await signFiles(field2, [photoId, estimateId])).toEqual([]);
     expect((await signFiles(sales, [photoId, estimateId])).map((f) => f.id).sort()).toEqual([photoId, estimateId].sort());
+  });
+
+  it("re-registering an existing file under another type neither deletes nor changes it", async () => {
+    const { data: row } = await service.from("files").select("storage_path, mime_type").eq("id", estimateId).single();
+    // The field user can upload to this deal, and knows (or guesses) the estimate's path.
+    for (const type of ["image/png", "application/pdf"]) {
+      const attempt = await registerUploadedFiles(field, { opportunityId: dealId, files: [{ id: estimateId, storagePath: row!.storage_path, name: "x", type, size: 1, category: "photo" }] });
+      expect(attempt.ok && attempt.data.count).toBeFalsy(); // refused, or nothing new recorded
+    }
+    expect((await service.storage.from(BUCKET).exists(row!.storage_path)).data).toBe(true);
+    expect((await service.from("files").select("mime_type, category").eq("id", estimateId).single()).data).toEqual({ mime_type: "application/pdf", category: "estimate" });
+    // A path outside the caller's target is refused before anything is read
+    expect(await registerUploadedFiles(sales, { opportunityId: otherDealId, files: [{ id: estimateId, storagePath: row!.storage_path, name: "x", type: "application/pdf", size: 1, category: "other" }] })).toMatchObject({ ok: false, error: { code: "invalid" } });
   });
 
   it("staff recategorize; field users cannot; only admins delete", async () => {

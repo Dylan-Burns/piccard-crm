@@ -1666,6 +1666,7 @@ export type Database = {
         }
         Returns: Json
       }
+      mark_files_verified: { Args: { p_paths: string[] }; Returns: number }
       mark_opportunity_lost: {
         Args: {
           p_competitor?: string

@@ -88,32 +88,51 @@ export async function createUploadSlots(ctx: FileContext, input: CreateUploadUrl
 /**
  * Reads the first bytes of each stored object and compares them with the declared type. Storage
  * only checks the type the uploader claimed, so this is where the content itself is looked at.
- * Objects that fail are removed. Only paths under the caller's own target are inspected.
+ * Anything that cannot be read counts as a failure. Nothing is deleted here: a path supplied by
+ * the caller may belong to a file that is already registered.
  */
-async function rejectMismatchedContent(files: { storagePath: string; type: string }[]): Promise<boolean> {
+async function contentIsValid(files: { storagePath: string; type: string }[]): Promise<boolean> {
   const storage = createAdminClient().storage.from(BUCKET);
-  const bad: string[] = [];
-  await Promise.all(
+  const results = await Promise.all(
     files.map(async (file) => {
       const { data } = await storage.createSignedUrl(file.storagePath, 60);
-      if (!data?.signedUrl) return; // not uploaded: register_files reports that
+      if (!data?.signedUrl) return false;
       const response = await fetch(data.signedUrl, { headers: { Range: "bytes=0-15" } }).catch(() => null);
-      if (!response?.ok) return;
+      if (!response?.ok) return false;
       const head = new Uint8Array(await response.arrayBuffer()).slice(0, 16);
-      if (!contentMatchesType(head, file.type)) bad.push(file.storagePath);
+      return contentMatchesType(head, file.type);
     }),
   );
-  if (bad.length > 0) await storage.remove(bad);
-  return bad.length > 0;
+  return results.every(Boolean);
 }
 
-/** Records uploaded objects through `register_files`, which checks access and the paths again. */
+/**
+ * Records uploaded objects. Order matters: confirm the caller may upload to the target, confirm
+ * every path is under that target, inspect the content, mark the objects as inspected (service
+ * role), then call `register_files` as the user. The RPC refuses unmarked objects, so calling it
+ * directly cannot skip the inspection.
+ */
 export async function registerUploadedFiles(ctx: FileContext, input: RegisterFilesInput): Promise<ActionResult<{ count: number }>> {
   const target = await resolveTarget(ctx, input);
   if (!target) return NOT_ALLOWED;
   const prefix = `${target.customerId}/${target.opportunityId ?? "_"}/`;
-  if (input.files.some((f) => !f.storagePath.startsWith(prefix))) return fail("invalid", "One of the files is not valid");
-  if (await rejectMismatchedContent(input.files)) return fail("invalid", "One of the files is not a photo or PDF");
+  if (input.files.some((f) => f.storagePath !== `${prefix}${f.id}.${extensionFor(f.type)}`)) return fail("invalid", "One of the files is not valid");
+
+  const admin = createAdminClient();
+  const paths = input.files.map((f) => f.storagePath);
+  // Files that are already registered were inspected then; do not re-judge them under a new declared type.
+  const { data: existing } = await admin.from("files").select("storage_path").in("storage_path", paths);
+  const registered = new Set((existing ?? []).map((r) => r.storage_path));
+  const fresh = input.files.filter((f) => !registered.has(f.storagePath));
+  if (fresh.length > 0) {
+    const { data: present } = await admin.storage.from(BUCKET).list(prefix.slice(0, -1), { limit: 1000 });
+    const stored = new Set((present ?? []).map((o) => `${prefix}${o.name}`));
+    if (fresh.some((f) => !stored.has(f.storagePath))) return fail("not_uploaded", "A file did not finish uploading. Try it again.");
+    if (!(await contentIsValid(fresh))) return fail("invalid", "One of the files is not a photo or PDF");
+    const { error } = await admin.rpc("mark_files_verified", { p_paths: fresh.map((f) => f.storagePath) });
+    if (error) return fail("failed", "Could not save the files. Please try again.");
+  }
+
   const p = {
     ...(input.jobId ? { job_id: input.jobId } : input.opportunityId ? { opportunity_id: input.opportunityId } : { customer_id: input.customerId }),
     ...(input.appointmentId ? { appointment_id: input.appointmentId } : {}),

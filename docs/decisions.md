@@ -132,3 +132,9 @@ One line per decision made where `docs/spec.md` was silent.
 - Job page: files and notes shown are the deal's (inspection photos and shared notes are useful to the crew); uploads from the job carry `job_id`. Staff-only data (contract amount, invoices, timeline) is not queried for field users. Field users see only their own crew row and their own work days, because that is what the `job_assignments` and `appointments` policies return.
 - Completion: the sheet offers the photo uploader and an optional note; the note is saved first, then `set_job_status` runs.
 - `assignUsers` only adds people; `unassignUser` removes one. Each is a single write.
+
+## Hotfix after Phase 8 (2026-10-03)
+- Security review of the Phase 8 commit, two findings in `features/files/storage.ts`:
+  1. The content check removed any object whose bytes did not match the declared type, and the path came from the caller. Someone allowed to upload to a deal could name an existing file's path with a different type and have its object deleted. The check no longer deletes anything, each path must be exactly `{target prefix}{id}.{extension for the declared type}`, and files that are already registered are not re-judged.
+  2. The content check ran only in the server action, so calling `register_files` directly skipped it. `0013_file_verification.sql` adds `mark_files_verified` (service role only), which the server calls after inspecting the bytes; it sets `verified` in storage's own object metadata, which uploaders cannot write. `register_files` now refuses objects without it (`not_verified`). An object that cannot be read fails the check.
+- Migration numbers are now two higher than the spec's phase plan (Phase 9's estimate RPCs are `0014_estimate_rpcs.sql`).
