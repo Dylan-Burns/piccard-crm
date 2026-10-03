@@ -25,3 +25,6 @@ test-results/
 # misc
 .DS_Store
 *.log
+*.pem
+/build
+.env.local.*

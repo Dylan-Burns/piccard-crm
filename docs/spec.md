@@ -709,6 +709,11 @@ RLS decides **which rows** a role may touch; these grants decide **which columns
 -- In 0001, before any table exists: new tables grant nothing to API roles by default.
 alter default privileges in schema public revoke all on tables    from anon, authenticated;
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
+-- service_role is not granted anything automatically on current Supabase versions; grant it explicitly.
+alter default privileges for role postgres in schema public  grant all on tables    to service_role;
+alter default privileges for role postgres in schema public  grant all on sequences to service_role;
+alter default privileges for role postgres in schema public  grant execute on functions to service_role;
+alter default privileges for role postgres in schema private grant execute on functions to service_role;
 
 -- Ownership defaults so users never supply these columns (and cannot spoof them).
 alter table customers alter column created_by set default auth.uid();
@@ -716,7 +721,7 @@ alter table notes     alter column author_id  set default auth.uid();
 alter table tasks     alter column created_by set default auth.uid();
 ```
 
-`anon` gets nothing on any table. `service_role` keeps Supabase's full grants. For `authenticated`:
+`anon` gets nothing on any table. `service_role` gets full access through the default privileges above (it is used only on the server, §1.5). For `authenticated`:
 
 | Table | select | insert (columns) | update (columns) | delete | Everything else goes through |
 |---|---|---|---|---|---|
