@@ -13,6 +13,10 @@ export function unwrapRpc<T extends RpcResult>(
   }
   const data = response.data as T | null;
   if (!data) return fail("rpc_failed", "Something went wrong. Please try again.");
-  if (!data.ok) return fail(data.code ?? "failed", data.message ?? "That could not be done");
+  if (!data.ok) {
+    // Gate failures list what is missing; surface the names as field keys so dialogs can ask for them.
+    const missing = Array.isArray(data.missing) ? Object.fromEntries(data.missing.map((m) => [m, "missing"])) : undefined;
+    return fail(data.code ?? "failed", data.message ?? "That could not be done", missing);
+  }
   return { ok: true, data };
 }

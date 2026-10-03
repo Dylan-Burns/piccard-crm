@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { StageBadge } from "@/components/shared/stage-badge";
 import type { Database } from "@/types/database";
 
@@ -28,13 +29,24 @@ export type DealSummary = {
  *   Estimate: Sent (E-1001)
  *   Status: Awaiting Signature
  */
-export function DealSummaryCard({ deal, actions }: { deal: DealSummary; actions?: React.ReactNode }) {
+export function DealSummaryCard({ deal, actions, href }: { deal: DealSummary; actions?: React.ReactNode; href?: string }) {
+  const heading = (
+    <>
+      <span>{deal.workLabel}</span>
+      {deal.value ? <span className="tabular"> · {deal.value}</span> : null}
+    </>
+  );
   return (
     <article className="rounded-md border p-3">
       <div className="flex items-start justify-between gap-3">
         <h3 className="min-w-0 text-base font-semibold">
-          <span>{deal.workLabel}</span>
-          {deal.value ? <span className="tabular"> · {deal.value}</span> : null}
+          {href ? (
+            <Link href={href} className="hover:underline">
+              {heading}
+            </Link>
+          ) : (
+            heading
+          )}
         </h3>
         <StageBadge stage={deal.stage} />
       </div>

@@ -5,6 +5,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  timeout: 60_000, // first hit on a route compiles it in dev
   reporter: [["list"]],
   use: { baseURL: "http://localhost:3000", trace: "retain-on-failure" },
   projects: [

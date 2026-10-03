@@ -99,7 +99,7 @@ function LeadTableRow({ lead, staff, timeZone }: { lead: LeadRow; staff: StaffOp
   return (
     <tr className={cn("h-12", !lead.owner_id && "bg-warning/5")}>
       <td className="px-3">
-        <Link href={`/customers/${lead.customer_id}`} className="font-medium hover:underline">
+        <Link href={`/opportunities/${lead.id}`} className="font-medium hover:underline">
           {name(lead)}
         </Link>
         <div className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
@@ -119,9 +119,9 @@ function LeadTableRow({ lead, staff, timeZone }: { lead: LeadRow; staff: StaffOp
       <td className="px-3 whitespace-nowrap">{lead.source?.name ?? "—"}</td>
       <td className="px-3 tabular whitespace-nowrap">{age(lead.created_at)}</td>
       <td className="px-3">
-        <OwnerSelect opportunityId={lead.id} customerId={lead.customer_id} ownerId={lead.owner_id} staff={staff} className="w-40" />
+        <OwnerSelect opportunityId={lead.id} customerId={lead.customer_id} ownerId={lead.owner_id} staff={staff} className="w-36" />
       </td>
-      <td className="max-w-64 truncate px-3">
+      <td className="max-w-48 truncate px-3">
         <NextStep lead={lead} timeZone={timeZone} />
       </td>
       <td className="px-3 text-right whitespace-nowrap">
@@ -136,7 +136,7 @@ function LeadCard({ lead, staff, timeZone }: { lead: LeadRow; staff: StaffOption
   return (
     <li className={cn("space-y-3 rounded-md border p-3", !lead.owner_id && "border-warning/50 bg-warning/5")}>
       <div className="flex items-start justify-between gap-3">
-        <Link href={`/customers/${lead.customer_id}`} className="min-w-0">
+        <Link href={`/opportunities/${lead.id}`} className="min-w-0">
           <p className="truncate font-medium">{name(lead)}</p>
           <p className="truncate text-muted-foreground">
             {lead.work_type ? WORK_TYPE_LABELS[lead.work_type] : "Type not set"} · {lead.source?.name ?? "Unknown source"}

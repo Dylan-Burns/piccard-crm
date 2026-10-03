@@ -1636,6 +1636,14 @@ export type Database = {
         Args: { p_opportunity_id: string; p_owner_id: string }
         Returns: Json
       }
+      change_opportunity_stage: {
+        Args: {
+          p_fill?: Json
+          p_opportunity_id: string
+          p_to_stage: Database["public"]["Enums"]["opportunity_stage"]
+        }
+        Returns: Json
+      }
       create_lead: { Args: { p: Json }; Returns: Json }
       log_contact: {
         Args: {
@@ -1643,6 +1651,30 @@ export type Database = {
           p_outcome: string
           p_summary?: string
           p_type: string
+        }
+        Returns: Json
+      }
+      mark_opportunity_lost: {
+        Args: {
+          p_competitor?: string
+          p_notes?: string
+          p_opportunity_id: string
+          p_reason: Database["public"]["Enums"]["lost_reason"]
+        }
+        Returns: Json
+      }
+      mark_opportunity_won: {
+        Args: {
+          p_amount_cents?: number
+          p_estimate_id?: string
+          p_opportunity_id: string
+        }
+        Returns: Json
+      }
+      reopen_opportunity: {
+        Args: {
+          p_opportunity_id: string
+          p_to_stage: Database["public"]["Enums"]["opportunity_stage"]
         }
         Returns: Json
       }

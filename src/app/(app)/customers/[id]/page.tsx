@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Mail, MapPin, MessageSquare, Pencil, Phone, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddTaskDialog } from "@/components/shared/add-task-dialog";
-import { DealSummaryCard, type DealSummary } from "@/components/shared/deal-summary-card";
+import { DealSummaryCard } from "@/components/shared/deal-summary-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { NoteComposer } from "@/components/shared/note-composer";
 import { TaskList, type TaskItem } from "@/components/shared/task-list";
@@ -13,10 +13,9 @@ import { CustomerFab } from "@/features/customers/components/customer-fab";
 import { CustomerPanels } from "@/features/customers/components/customer-panels";
 import { getCustomerDetail, getDealMilestones, type CustomerDeal } from "@/features/customers/queries";
 import { LogContactDialog } from "@/features/leads/components/log-contact-dialog";
+import { summarizeDeal } from "@/features/opportunities/summary";
 import { requireRole } from "@/lib/auth";
 import { dueState, formatDateTime, relativeTime, tomorrowAtNine } from "@/lib/dates";
-import { dealStatus, ESTIMATE_STATUS_LABELS, JOB_STATUS_LABELS, WORK_TYPE_LABELS } from "@/lib/deal-status";
-import { formatCents } from "@/lib/money";
 import { formatPhone, telHref } from "@/lib/phone";
 import { getTimeZone, listUserOptions } from "@/lib/settings";
 
@@ -24,37 +23,6 @@ export const metadata: Metadata = { title: "Customer" };
 
 const STAGE_ORDER = { open: 0, won: 1, lost: 2 } as const;
 const bucket = (deal: CustomerDeal) => (deal.stage === "won" ? "won" : deal.stage === "lost" ? "lost" : "open");
-
-function summarize(deal: CustomerDeal, address: string | null, timeZone: string): DealSummary {
-  const inspections = deal.appointments.filter((a) => a.type === "inspection");
-  const scheduled = inspections.filter((a) => a.status === "scheduled").sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
-  const completed = inspections.filter((a) => a.status === "completed").sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
-  const estimate = deal.estimates.filter((e) => e.status !== "void").sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-  const value = deal.amount_cents ?? deal.estimated_value_cents;
-  const shown = scheduled ?? completed;
-
-  return {
-    id: deal.id,
-    workLabel: deal.work_type ? WORK_TYPE_LABELS[deal.work_type] : "New inquiry",
-    value: value ? formatCents(value) : null,
-    address,
-    stage: deal.stage,
-    inspection: shown ? { label: formatDateTime(shown.starts_at, timeZone), done: !scheduled } : null,
-    estimate: estimate
-      ? `${ESTIMATE_STATUS_LABELS[estimate.status]} (E-${estimate.estimate_number}${estimate.version > 1 ? `-v${estimate.version}` : ""})`
-      : null,
-    status: dealStatus({
-      stage: deal.stage,
-      lostReason: deal.lost_reason,
-      estimateStatus: estimate?.status ?? null,
-      hasScheduledInspection: Boolean(scheduled),
-      hasCompletedInspection: Boolean(completed),
-      jobStatus: deal.jobs?.status ?? null,
-    }),
-    owner: deal.owner?.full_name ?? null,
-    jobLabel: deal.jobs ? `J-${deal.jobs.job_number} · ${JOB_STATUS_LABELS[deal.jobs.status]}` : null,
-  };
-}
 
 export default async function CustomerPage({ params }: PageProps<"/customers/[id]">) {
   const me = await requireRole("admin", "sales");
@@ -150,7 +118,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
             {deals.map((deal) => (
               <DealSummaryCard
                 key={deal.id}
-                deal={summarize(deal, addressOf(deal.property_id), timeZone)}
+                deal={summarizeDeal(deal, addressOf(deal.property_id), timeZone)}
+                href={`/opportunities/${deal.id}`}
                 actions={
                   bucket(deal) === "open" ? (
                     <LogContactDialog

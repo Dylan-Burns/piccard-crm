@@ -9,7 +9,9 @@ step "db types"  pnpm -s db:types
 step "lint"      pnpm -s lint
 step "typecheck" pnpm -s typecheck
 step "tests"     pnpm -s test
-step "build"     pnpm -s build
+# e2e runs before the production build: starting the dev server right after a build cold-compiles
+# every route and has caused timeouts.
 step "e2e"       pnpm -s e2e
 step "tests (repeat, after e2e)" pnpm -s test
+step "build"     pnpm -s build
 git diff --quiet src/types/database.ts || echo "note: src/types/database.ts changed; commit it"

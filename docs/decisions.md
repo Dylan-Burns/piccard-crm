@@ -69,3 +69,13 @@ One line per decision made where `docs/spec.md` was silent.
 - Customer search: each word must match first name, last name, company, or email; a phone-like query matches phone digits; the whole query is also matched against street addresses. Filter terms are stripped of PostgREST filter characters.
 - On phones the customer header (name, Call / Text / Navigate) is sticky; the section tabs below it are not.
 - RPC results are unwrapped by `lib/rpc.ts` (`unwrapRpc`) into `ActionResult`.
+
+## Phase 4 (2026-10-03)
+- `0006` redefines `private.check_stage_gate`: the 0005 version used `text[] || 'literal'`, which Postgres reads as an array literal and fails at run time whenever something is missing. Use `array_append`.
+- `change_opportunity_stage` takes `p_fill` so the board's gate dialog saves the missing data and moves the deal in one RPC (keeps the "one RPC per action" rule). Fills are kept even when the gate still fails for something that cannot be typed (an inspection, a sent estimate).
+- Board optimism uses `useOptimistic`: the card shows in the new column during the request and falls back to server data when it finishes, which is the revert on failure.
+- Board Won/Lost are drop zones with 30-day counts; closed deals are not listed on the board (they are on the customer page).
+- Sales reps open the board filtered to their own deals; admins to all owners. Filters are GET parameters.
+- Phone board: stage chips with counts, horizontal swipe changes stage, each card has a Move button that opens a sheet. No dragging on touch.
+- Deal cards and the leads inbox now link to `/opportunities/[id]`. The deal page has placeholders in code comments for appointments (phase 6), files (phase 7), and estimates (phase 9).
+- Radix dialogs set `aria-hidden` on the rest of the page; browser tests must not query the page by role while a dialog is open.
