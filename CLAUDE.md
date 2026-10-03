@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # Piccard Roofing CRM
 
 Single-company CRM for a roofing and renovation business: lead → call → inspection → estimate → won/lost → job.
@@ -6,7 +8,7 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 
 ## Stack
 - Next.js App Router, TypeScript strict, Tailwind v4, shadcn/ui, deployed on Vercel (Node runtime only; never Edge).
-- Supabase: Postgres, Auth (invite-only email + password), Storage (private bucket `crm-files`).
+- Supabase: Postgres, Auth (invite-only email + password), Storage (private bucket `crm-files`). Two projects: `piccard-crm` (production, Vercel Production env) and `piccard-crm-staging` (Vercel Preview env). Local dev uses `supabase start`.
 - supabase-js with generated types. No ORM. pnpm.
 - Resend + React Email, @react-pdf/renderer, @dnd-kit, zod, react-hook-form, date-fns(-tz), libphonenumber-js.
 - Tests: Vitest (unit + RLS integration against local Supabase), Playwright (e2e smoke).
@@ -16,14 +18,15 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 - `pnpm seed` — dev users and sample data (local only). Users: admin@test.local, sales@test.local, field@test.local / Password123!
 - `pnpm db:types` — regenerate `src/types/database.ts` after every migration. Never edit that file by hand.
 - `pnpm lint && pnpm typecheck && pnpm test && pnpm build` — must pass before a phase is done.
+- `supabase db push` — apply migrations to the linked remote project: staging from a phase branch, production only after merge to `main`.
 
 ## Non-negotiable rules
 1. **Do not change the schema, RLS policies, or lifecycle rules** defined in `docs/spec.md` §2–§4. If they cannot be implemented as written, stop and ask.
 2. **Migrations are append-only.** New numbered file in `supabase/migrations/`; never edit an applied migration.
-3. **RLS is the authorization layer.** Every table has RLS enabled. Use the user-scoped client (`lib/supabase/server.ts`) for all user-initiated reads and writes.
-4. **The service-role client (`lib/supabase/admin.ts`) is allowed only in:** webhook routes, cron routes, integration workers, the public estimate page and its actions, storage URL signing, and user invitation. It imports `server-only`.
+3. **The database is the authorization layer.** Every table has RLS enabled (which rows), column-level grants (which columns, spec §2.10), and lifecycle columns are writable only through RPCs. Use the user-scoped client (`lib/supabase/server.ts`) for all user-initiated reads and writes. A direct write that hits `permission denied` means you need the RPC, not a broader grant.
+4. **The service-role client (`lib/supabase/admin.ts`) is allowed only in:** webhook routes, cron routes, integration workers, the public estimate page and its actions, storage URL signing, and user administration (invite, deactivate). It imports `server-only`.
 5. **Multi-step writes are Postgres RPCs**, never several sequential supabase-js calls. A server action validates with zod, calls one RPC (or one simple write), revalidates, and returns `ActionResult<T>`.
-6. **RPCs return `{ok:false, code, …}` for business-rule failures** and raise only for authorization failures. Every `security definer` function sets `search_path = public` and begins with an authorization guard.
+6. **RPCs return `{ok:false, code, …}` for business-rule failures** and raise only for authorization failures. Function rules (spec §2.1): helpers and triggers in schema `private`, callable RPCs in `public`; every function has `set search_path = ''` and schema-qualifies every name; every `security definer` RPC begins with an authorization guard; execute is default-denied, so each RPC is followed by an explicit `grant execute … to authenticated` (or `service_role`).
 7. **Money is integer cents** in columns ending `_cents`. Format only at the edge with `lib/money.ts`. Never use floats for money.
 8. **Timestamps are `timestamptz` in UTC.** Display and date-bucketing use the company timezone from `company_settings.timezone` via `lib/dates.ts`.
 9. **Estimate totals are computed by the database trigger.** TypeScript totals are a preview only and must match `features/estimates/totals.ts` tests.
@@ -33,20 +36,22 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 13. **Activity summaries never contain dollar amounts.** Put amounts in `metadata`.
 14. **Field users must never receive prices.** They have no access to opportunities, estimates, invoices, or activities. Field screens read only jobs, appointments, customers, properties, notes, files, tasks.
 15. **Files are uploaded only from inside a record** (deal, job, appointment). The server generates storage paths. All storage access is by server-signed URL; there are no storage policies.
-16. **External calls go through the outbox** (`sync_outbox`) and must be idempotent: Google event id = appointment UUID without dashes; QuickBooks create uses `requestid` = invoice id; emails use `email_log.dedupe_key`.
-17. **Integration failures never fail a user action.** Save first, sync after.
+16. **External calls go through the outbox** (`sync_outbox`) and must be idempotent: Google event id = appointment UUID without dashes; QuickBooks create uses `requestid` = invoice id; emails use `email_log.dedupe_key` and only status `sent` suppresses a retry.
+17. **Integration failures never fail a user action.** Save first, sync after. Webhooks store the raw payload before answering 200, and answer 5xx if they cannot store it.
 18. **Stages `won` and `lost` are reached only through `mark_opportunity_won` / `mark_opportunity_lost`.**
+19. **Secrets never reach the browser.** Webhook secrets are server-to-server only. Every redirect target from user input goes through `lib/safe-redirect.ts`.
+20. **Lead dedupe is conservative.** Deliveries dedupe by `external_id`; deals merge only on customer + property (spec §6.5); manual entry never auto-merges.
 
 ## Schema summary
 - `profiles` (role: admin | sales | field), `company_settings` (singleton), `lead_sources`
 - `customers` 1─N `properties`
-- `opportunities` (customer + property; stage; owner; source; value; insurance fields; won/lost fields), `opportunity_stage_history`, `lead_submissions`
+- `opportunities` (customer + property; stage; owner; source; value; insurance fields; won/lost fields; first-contact attempt/connection; `closed_owner_id` for reporting), `opportunity_stage_history`, `lead_submissions` (raw payload stored first; status received → created / merged_duplicate / rejected / error)
 - `estimates` (per opportunity; number + version; one accepted) 1─N `estimate_line_items`; `price_book_items`
 - `jobs` (one per won opportunity; no money columns) N─N `profiles` via `job_assignments`
 - `appointments` (always has opportunity_id; job_id for work days; Google sync columns)
-- `invoices` (per job; deposit | progress | final; QuickBooks sync columns) 1─N `invoice_line_items`
+- `invoices` (per job; deposit | final only; amounts generated from the accepted estimate, never hand-edited; QuickBooks sync columns) 1─N `invoice_line_items`
 - `notes`, `files`, `activities` (append-only), `tasks` — each with customer_id / opportunity_id / job_id
-- `integration_connections`, `sync_outbox`, `email_log` — service role only
+- `integration_connections`, `sync_outbox`, `email_log` (pending / sent / failed) — service role only
 
 Stages: new → contacted → qualified → inspection_scheduled → estimate_sent → negotiation → won | lost.
 
@@ -66,4 +71,4 @@ Stages: new → contacted → qualified → inspection_scheduled → estimate_se
 - Phone numbers are `tel:` links; addresses offer Navigate.
 
 ## Definition of done for any phase
-All acceptance criteria in `docs/spec.md` §9 for that phase pass, the standard gate passes, new behavior has tests, `docs/decisions.md` is updated, and the work is deployed to a Vercel preview.
+All acceptance criteria in `docs/spec.md` §9 for that phase pass, the standard gate passes, new behavior has tests (including a privilege test for every new RPC and every newly granted column), `docs/decisions.md` is updated, and the work is deployed to a Vercel preview backed by staging. A phase may span several sessions; commit at checkpoints, never widen its scope.
