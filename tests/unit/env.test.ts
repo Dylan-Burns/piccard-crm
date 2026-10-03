@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePublicEnv, parseServerEnv } from "@/lib/env";
+import { parsePublicEnv, parseServerEnv, resolveOrigin } from "@/lib/env";
 
 const base = {
   NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54421",
@@ -27,5 +27,13 @@ describe("env", () => {
     expect(() => parseServerEnv({ ...base, SUPABASE_SECRET_KEY: "s", QBO_ENVIRONMENT: "prod" })).toThrow(
       /QBO_ENVIRONMENT/,
     );
+  });
+});
+
+describe("resolveOrigin", () => {
+  it("accepts a known host and rejects a forged one", () => {
+    expect(resolveOrigin("localhost:3000", "http")).toBe("http://localhost:3000");
+    expect(resolveOrigin("evil.example", "https")).toBe("http://localhost:3000");
+    expect(resolveOrigin(null, null)).toBe("http://localhost:3000");
   });
 });

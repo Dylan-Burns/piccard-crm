@@ -4,7 +4,7 @@ import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { currentProfileWithRole } from "@/lib/auth";
-import { appUrl, publicEnv } from "@/lib/env";
+import { publicEnv, resolveOrigin } from "@/lib/env";
 import { fail, fieldErrors, ok, type ActionResult } from "@/lib/result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -76,8 +76,8 @@ export async function changePassword(_prev: ActionResult | null, formData: FormD
 /** Builds the app's own confirm link from a hashed token, so no email provider is needed. */
 async function confirmLink(hashedToken: string, type: "invite" | "recovery"): Promise<string> {
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const origin = host ? `${h.get("x-forwarded-proto") ?? "https"}://${host}` : appUrl();
+  // Only trust the Host header when it matches an origin this deployment is served from.
+  const origin = resolveOrigin(h.get("host"), h.get("x-forwarded-proto"));
   const params = new URLSearchParams({ next: "/set-password", token_hash: hashedToken, type });
   return `${origin}/auth/confirm?${params.toString()}`;
 }

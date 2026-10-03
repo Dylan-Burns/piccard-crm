@@ -66,3 +66,29 @@ export function appUrl(): string {
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return "http://localhost:3000";
 }
+
+/**
+ * Origins this deployment is known to be served from. Used to validate a request's Host header
+ * before building links from it, so a forged header cannot point a one-time link at another site.
+ */
+export function trustedOrigins(): string[] {
+  const origins = new Set<string>([appUrl()]);
+  for (const name of ["VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"] as const) {
+    const host = process.env[name];
+    if (host) origins.add(`https://${host}`);
+  }
+  if (process.env.NODE_ENV !== "production") {
+    origins.add("http://localhost:3000");
+    origins.add("http://127.0.0.1:3000");
+  }
+  return [...origins];
+}
+
+/** Returns the request's origin if it is one of ours, otherwise the configured app URL. */
+export function resolveOrigin(host: string | null, proto: string | null): string {
+  if (host) {
+    const candidate = `${proto === "http" ? "http" : "https"}://${host}`;
+    if (trustedOrigins().includes(candidate)) return candidate;
+  }
+  return appUrl();
+}

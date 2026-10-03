@@ -40,3 +40,4 @@ One line per decision made where `docs/spec.md` was silent.
 - Security review fixes: sign-out is a server action; `GET /auth/signout` acts only for deactivated users. Changing a password in Settings requires the current password; `/set-password` refuses password-based sessions (checks the JWT `amr` claim).
 - `supabase projects api-keys` masks secret keys unless `--reveal` is passed. The Vercel `SUPABASE_SECRET_KEY` values were first stored masked and have been replaced with the real keys (Production and Preview).
 - Seed adds `reset@test.local` for the password-reset e2e test and always restores seed passwords.
+- `/auth/confirm` is a page with a Continue button (POST), not a GET route: prevents login CSRF and link consumption by email scanners. Invite/reset links take their host from the request only when it matches a known origin (`resolveOrigin` in `lib/env.ts`), otherwise from the configured app URL.

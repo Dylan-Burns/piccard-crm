@@ -1,5 +1,6 @@
 "use server";
 
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { homeFor } from "@/lib/auth";
@@ -65,6 +66,31 @@ const setPasswordSchema = z
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords do not match" });
+
+const LINK_TYPES: EmailOtpType[] = ["invite", "recovery"];
+const LINK_ERROR = "That link is invalid or has expired. Ask an admin for a new one, or use Forgot password on the sign-in page.";
+
+/** Verifies an invite or reset link. Called by the Continue button on /auth/confirm (never on GET). */
+export async function confirmEmailLink(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const tokenHash = String(formData.get("token_hash") ?? "");
+  const type = String(formData.get("type") ?? "") as EmailOtpType;
+  const code = String(formData.get("code") ?? "");
+  const next = safeRedirectPath(String(formData.get("next") ?? "")) ?? "/";
+
+  const supabase = await createClient();
+  let verified = false;
+  if (tokenHash && LINK_TYPES.includes(type)) {
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    verified = !error;
+  } else if (code) {
+    // Supabase's built-in email templates (used until custom SMTP is configured) return a PKCE code,
+    // which only works in the browser that requested it.
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    verified = !error;
+  }
+  if (!verified) return fail("link", LINK_ERROR);
+  redirect(next);
+}
 
 export async function signOutAction(): Promise<void> {
   const supabase = await createClient();

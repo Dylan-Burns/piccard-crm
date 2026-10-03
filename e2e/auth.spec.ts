@@ -14,10 +14,20 @@ test("open-redirect attempts stay on the site", async ({ page }) => {
   await expect(page).toHaveURL(/localhost:3000\/dashboard/);
 });
 
-test("a bad confirm link goes to the login page, not to its next target", async ({ page }) => {
+test("a bad confirm link shows an error and never leaves the site", async ({ page }) => {
   await page.goto("/auth/confirm?token_hash=x&type=invite&next=//evil.com");
-  await expect(page).toHaveURL(/localhost:3000\/login\?error=link/);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(errorBanner(page)).toContainText("invalid or has expired");
+  await expect(page).toHaveURL(/localhost:3000\/auth\/confirm/);
+});
+
+test("opening a link does not sign anyone in until Continue is pressed", async ({ page, request }) => {
+  // A scanner-style GET must not consume the token or create a session.
+  const response = await request.get("/auth/confirm?token_hash=x&type=recovery&next=/set-password");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["set-cookie"] ?? "").not.toContain("auth-token");
+  await page.goto("/auth/confirm?token_hash=x&type=recovery&next=/set-password");
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
 });
 
 test("wrong password shows an error", async ({ page }) => {
@@ -77,6 +87,7 @@ test("admin invites a user, who sets a password, and can then be deactivated", a
   // The invited user opens the link in a separate browser session.
   const invited = await (await browser.newContext()).newPage();
   await invited.goto(link);
+  await invited.getByRole("button", { name: "Continue" }).click();
   await expect(invited).toHaveURL(/\/set-password/);
   await invited.getByLabel("New password").fill("NewPassword456!");
   await invited.getByLabel("Confirm password").fill("NewPassword456!");
@@ -105,6 +116,7 @@ test("forgot password emails a working reset link", async ({ page }, testInfo) =
   await expect(page.getByRole("status")).toContainText("reset link is on its way");
 
   await page.goto(await latestEmailLink("reset@test.local"));
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/set-password/);
   await page.getByLabel("New password").fill("Password123!x");
   await page.getByLabel("Confirm password").fill("Password123!x");
