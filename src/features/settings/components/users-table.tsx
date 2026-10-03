@@ -3,9 +3,10 @@
 import { useActionState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CopyLink } from "@/components/shared/copy-link";
 import { NativeSelect } from "@/components/shared/native-select";
 import { useActionToast } from "@/components/shared/use-action-toast";
-import { setUserActive, updateUserRole } from "@/features/settings/actions";
+import { createResetLink, setUserActive, updateUserRole } from "@/features/settings/actions";
 import { ROLE_DESCRIPTIONS } from "@/features/settings/components/role-labels";
 import type { Database } from "@/types/database";
 
@@ -29,9 +30,13 @@ function UserRowItem({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
   const [activeState, activeAction, activePending] = useActionState(setUserActive, null);
   useActionToast(roleState, "Role updated");
   useActionToast(activeState, user.is_active ? "User reactivated" : "User deactivated");
+  const [resetState, resetAction, resetPending] = useActionState(createResetLink, null);
+  useActionToast(resetState, "Reset link created");
+  const resetLink = resetState?.ok ? resetState.data.link : null;
 
   return (
-    <li className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
+    <li className="space-y-3 p-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0">
         <p className="flex items-center gap-2 font-medium">
           <span className="truncate">{user.full_name}</span>
@@ -40,7 +45,13 @@ function UserRowItem({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
         </p>
         <p className="truncate text-muted-foreground">{user.email}</p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <form action={resetAction}>
+          <input type="hidden" name="user_id" value={user.id} />
+          <Button type="submit" variant="ghost" className="h-11 md:h-9" disabled={resetPending || !user.is_active}>
+            Reset link
+          </Button>
+        </form>
         <form action={roleAction}>
           <input type="hidden" name="user_id" value={user.id} />
           <NativeSelect
@@ -66,6 +77,13 @@ function UserRowItem({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
           </Button>
         </form>
       </div>
+      </div>
+      {resetLink ? (
+        <div className="space-y-1.5">
+          <p className="text-muted-foreground">One-time password reset link for {user.full_name}. Expires in 24 hours.</p>
+          <CopyLink link={resetLink} label={`Reset link for ${user.full_name}`} />
+        </div>
+      ) : null}
     </li>
   );
 }

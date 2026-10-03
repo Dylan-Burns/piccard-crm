@@ -48,7 +48,7 @@ export async function getSessionProfile(): Promise<Profile | null> {
 export async function requireRole(...roles: UserRole[]): Promise<Profile> {
   const state = await getSessionState();
   if (state.status === "anonymous") redirect("/login");
-  if (state.status === "inactive") redirect("/auth/signout?reason=deactivated");
+  if (state.status === "inactive") redirect("/auth/signout");
 
   const { profile } = state;
   const allowed = roles.length === 0 ? ALL_ROLES : roles;

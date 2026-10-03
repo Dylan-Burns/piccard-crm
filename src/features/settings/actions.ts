@@ -1,8 +1,10 @@
 "use server";
 
+import { createClient as createPlainClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { currentProfileWithRole } from "@/lib/auth";
-import { appUrl } from "@/lib/env";
+import { appUrl, publicEnv } from "@/lib/env";
 import { fail, fieldErrors, ok, type ActionResult } from "@/lib/result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -42,10 +44,26 @@ export async function changePassword(_prev: ActionResult | null, formData: FormD
   const parsed = changePasswordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return fail("invalid", "Check the highlighted fields", fieldErrors(parsed.error.issues));
 
+  // Re-authenticate with the current password on a throwaway client, so a hijacked session
+  // alone cannot change the password.
+  const env = publicEnv();
+  const verifier = createPlainClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error: verifyError } = await verifier.auth.signInWithPassword({
+    email: me.email,
+    password: parsed.data.current_password,
+  });
+  if (verifyError) {
+    return fail("invalid", "Check the highlighted fields", { current_password: "Current password is incorrect" });
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {
-    if (error.code === "same_password") return fail("same_password", "Choose a password different from your current one");
+    if (error.code === "same_password") {
+      return fail("invalid", "Check the highlighted fields", { password: "Choose a different password" });
+    }
     return fail("update_failed", error.message);
   }
   return ok();
@@ -55,7 +73,18 @@ export async function changePassword(_prev: ActionResult | null, formData: FormD
 // Users (admin)
 // ---------------------------------------------------------------------------
 
-export async function inviteUser(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+/** Builds the app's own confirm link from a hashed token, so no email provider is needed. */
+async function confirmLink(hashedToken: string, type: "invite" | "recovery"): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const origin = host ? `${h.get("x-forwarded-proto") ?? "https"}://${host}` : appUrl();
+  const params = new URLSearchParams({ next: "/set-password", token_hash: hashedToken, type });
+  return `${origin}/auth/confirm?${params.toString()}`;
+}
+
+export type LinkResult = { link: string; email: string };
+
+export async function inviteUser(_prev: ActionResult<LinkResult> | null, formData: FormData): Promise<ActionResult<LinkResult>> {
   const me = await currentProfileWithRole("admin");
   if (!me) return NOT_ALLOWED;
   const parsed = inviteSchema.safeParse(Object.fromEntries(formData));
@@ -64,11 +93,15 @@ export async function inviteUser(_prev: ActionResult | null, formData: FormData)
 
   // Service client is allowed for user invitation (CLAUDE.md rule 4).
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { full_name },
-    redirectTo: `${appUrl()}/auth/confirm?next=/set-password`,
+  // generateLink creates the invited user and returns a token without sending email. The admin
+  // shares the link. (Supabase's built-in email only reaches org members; a branded email is
+  // added with Resend in Phase 5.)
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: { data: { full_name } },
   });
-  if (error || !data.user) {
+  if (error || !data.user || !data.properties?.hashed_token) {
     if (error?.code === "email_exists" || error?.status === 422) {
       return fail("email_exists", "A user with that email already exists", { email: "Already invited or registered" });
     }
@@ -80,7 +113,25 @@ export async function inviteUser(_prev: ActionResult | null, formData: FormData)
   if (roleError) return fail("role_failed", "Invitation sent, but setting the role failed. Change it in the list.");
 
   revalidatePath("/settings/users");
-  return ok();
+  return ok({ link: await confirmLink(data.properties.hashed_token, "invite"), email });
+}
+
+/** Admin fallback for a user who cannot receive a reset email: returns a one-time reset link. */
+export async function createResetLink(_prev: ActionResult<LinkResult> | null, formData: FormData): Promise<ActionResult<LinkResult>> {
+  const me = await currentProfileWithRole("admin");
+  if (!me) return NOT_ALLOWED;
+  const userId = formData.get("user_id");
+  if (typeof userId !== "string") return fail("invalid", "Invalid request");
+
+  const supabase = await createClient();
+  const { data: target } = await supabase.from("profiles").select("email, is_active").eq("id", userId).maybeSingle();
+  if (!target || !target.is_active) return fail("not_found", "That user is not active");
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email: target.email });
+  if (error || !data.properties?.hashed_token) return fail("link_failed", error?.message ?? "Could not create a reset link");
+
+  return ok({ link: await confirmLink(data.properties.hashed_token, "recovery"), email: target.email });
 }
 
 export async function updateUserRole(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {

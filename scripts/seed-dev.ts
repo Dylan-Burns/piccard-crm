@@ -22,6 +22,8 @@ export const SEED_USERS = [
   { email: "admin@test.local", full_name: "Alex Admin", role: "admin" },
   { email: "sales@test.local", full_name: "Sam Sales", role: "sales" },
   { email: "field@test.local", full_name: "Fran Field", role: "field" },
+  // Used only by the password-reset e2e test, which changes this user's password.
+  { email: "reset@test.local", full_name: "Rae Reset", role: "field" },
 ] as const;
 
 const admin = createClient<Database>(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -41,6 +43,10 @@ async function main() {
       });
       if (error) throw error;
       id = data.user.id;
+    } else {
+      // Restore the known password and lift any ban left by a test run.
+      const { error } = await admin.auth.admin.updateUserById(id, { password: SEED_PASSWORD, ban_duration: "none" });
+      if (error) throw error;
     }
     const { error } = await admin
       .from("profiles")

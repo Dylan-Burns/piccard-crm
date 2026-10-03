@@ -69,13 +69,12 @@ test("admin invites a user, who sets a password, and can then be deactivated", a
   await dialog.getByLabel("Name").fill("Ivy Invited");
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByLabel("Role").selectOption("field");
-  await dialog.getByRole("button", { name: "Send invitation" }).click();
-  await expect(page.getByText("Invitation sent")).toBeVisible();
-  await expect(page.getByText(email)).toBeVisible();
-
-  // The invited user follows the emailed link in a separate browser session.
-  const link = await latestEmailLink(email);
+  await dialog.getByRole("button", { name: "Create invitation" }).click();
+  const link = await dialog.getByLabel("Invitation link").inputValue();
   expect(link).toContain("localhost:3000/auth/confirm");
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  // The invited user opens the link in a separate browser session.
   const invited = await (await browser.newContext()).newPage();
   await invited.goto(link);
   await expect(invited).toHaveURL(/\/set-password/);
@@ -95,6 +94,51 @@ test("admin invites a user, who sets a password, and can then be deactivated", a
   await expect(invited).toHaveURL(/\/login/);
   await signIn(invited, email, "NewPassword456!", false);
   await expect(errorBanner(invited)).toContainText("deactivated");
+});
+
+test("forgot password emails a working reset link", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "one run is enough");
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await page.getByLabel("Email").fill("reset@test.local");
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page.getByRole("status")).toContainText("reset link is on its way");
+
+  await page.goto(await latestEmailLink("reset@test.local"));
+  await expect(page).toHaveURL(/\/set-password/);
+  await page.getByLabel("New password").fill("Password123!x");
+  await page.getByLabel("Confirm password").fill("Password123!x");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(page).toHaveURL(/\/today/);
+});
+
+test("changing a password needs the current one, and sign-out works", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "one run is enough");
+  await signIn(page, "sales@test.local");
+
+  // A password-based session cannot use the invite/reset form.
+  await page.goto("/set-password");
+  await page.getByLabel("New password").fill("Whatever123!");
+  await page.getByLabel("Confirm password").fill("Whatever123!");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(errorBanner(page)).toContainText("Settings");
+
+  await page.goto("/settings/profile");
+  await page.getByLabel("Current password").fill("not-my-password");
+  await page.getByLabel("New password", { exact: true }).fill("Whatever123!");
+  await page.getByLabel("Confirm new password").fill("Whatever123!");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByText("Current password is incorrect")).toBeVisible();
+
+  // GET /auth/signout must not log an active user out.
+  await page.goto("/auth/signout");
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  await page.getByRole("button", { name: "Account menu" }).first().click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login/);
 });
 
 test("admin can save company settings", async ({ page }, testInfo) => {

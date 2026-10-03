@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { NavItem } from "@/components/shell/nav";
+import { signOutAction } from "@/features/auth/actions";
 import type { ShellUser } from "@/components/shell/app-shell";
 
 const ROLE_LABEL = { admin: "Admin", sales: "Sales", field: "Field" } as const;
@@ -65,12 +66,9 @@ export function UserMenu({ user, items, compact = false }: { user: ShellUser; it
           );
         })}
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          {/* Plain <a>, not <Link>: prefetching a sign-out URL would sign the user out. */}
-          <a href="/auth/signout">
-            <LogOut className="size-4" aria-hidden />
-            Sign out
-          </a>
+        <DropdownMenuItem onSelect={() => void signOutAction()}>
+          <LogOut className="size-4" aria-hidden />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

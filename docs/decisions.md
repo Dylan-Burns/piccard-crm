@@ -35,3 +35,8 @@ One line per decision made where `docs/spec.md` was silent.
 - Extra dev dependency `dotenv` (seed script and vitest load `.env.local`). Test config is `vitest.config.mts`; `server-only` is stubbed in tests.
 - Added `pnpm e2e` (Playwright, desktop + 390px mobile projects). The invite flow test reads the email from local Mailpit (port 54424).
 - Settings nav shows only Profile, Company, Users for now; lead sources, price book, integrations are added by their phases.
+- Invites and admin-issued password resets use `auth.admin.generateLink` and show a copyable link instead of sending email. Reason: on the free tier Supabase rejects custom email templates without custom SMTP, and its built-in email only delivers to org members. Spec Phase 1 steps 7 and 9 updated. Revisit in Phase 5 (Resend): send the link by email and configure Resend SMTP in Supabase Auth so "Forgot password" works for everyone.
+- Until SMTP is configured, hosted "Forgot password" emails reach only Supabase org members and use Supabase's default template (handled by the `code` exchange in `/auth/confirm`). Admins can issue a reset link from Settings → Users.
+- Security review fixes: sign-out is a server action; `GET /auth/signout` acts only for deactivated users. Changing a password in Settings requires the current password; `/set-password` refuses password-based sessions (checks the JWT `amr` claim).
+- `supabase projects api-keys` masks secret keys unless `--reveal` is passed. The Vercel `SUPABASE_SECRET_KEY` values were first stored masked and have been replaced with the real keys (Production and Preview).
+- Seed adds `reset@test.local` for the password-reset e2e test and always restores seed passwords.

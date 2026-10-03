@@ -12,9 +12,17 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type") as EmailOtpType | null;
   const next = safeRedirectPath(searchParams.get("next")) ?? "/";
 
+  const supabase = await createClient();
+
   if (tokenHash && type && ALLOWED_TYPES.includes(type)) {
-    const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    if (!error) return NextResponse.redirect(new URL(next, request.url));
+  }
+
+  // Supabase's built-in email templates (used until custom SMTP is configured) return a PKCE code.
+  const code = searchParams.get("code");
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return NextResponse.redirect(new URL(next, request.url));
   }
 

@@ -66,6 +66,12 @@ const setPasswordSchema = z
   })
   .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords do not match" });
 
+export async function signOutAction(): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
+
 export async function setPassword(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const parsed = setPasswordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return fail("invalid", "Check the highlighted fields", fieldErrors(parsed.error.issues));
@@ -73,6 +79,12 @@ export async function setPassword(_prev: ActionResult | null, formData: FormData
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims?.claims?.sub) return fail("no_session", "Your link has expired. Request a new one from the sign-in page.");
+  // This form skips the current-password check, so it only works for sessions that came from an
+  // invite or reset link. A password-based session must use Settings → Profile instead.
+  const methods = (claims.claims.amr ?? []).map((entry) => (typeof entry === "string" ? entry : entry.method));
+  if (methods.includes("password")) {
+    return fail("reauth_required", "To change your password, go to Settings → Profile and enter your current password.");
+  }
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {

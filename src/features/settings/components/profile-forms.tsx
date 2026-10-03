@@ -45,6 +45,11 @@ export function PasswordForm() {
   return (
     <form ref={formRef} action={action} className="space-y-4">
       <div className="space-y-1.5">
+        <Label htmlFor="current_password">Current password</Label>
+        <Input id="current_password" name="current_password" type="password" autoComplete="current-password" required className="h-11 md:h-9" />
+        <FieldError message={fields?.current_password} />
+      </div>
+      <div className="space-y-1.5">
         <Label htmlFor="password">New password</Label>
         <Input id="password" name="password" type="password" autoComplete="new-password" required className="h-11 md:h-9" />
         <FieldError message={fields?.password} />

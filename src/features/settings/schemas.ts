@@ -17,6 +17,7 @@ export const profileSchema = z.object({
 
 export const changePasswordSchema = z
   .object({
+    current_password: z.string().min(1, "Enter your current password"),
     password: z.string().min(8, "Use at least 8 characters").max(72, "Use at most 72 characters"),
     confirm: z.string(),
   })
