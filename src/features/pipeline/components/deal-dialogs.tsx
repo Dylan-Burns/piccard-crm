@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError } from "@/components/shared/field-error";
 import { NativeSelect } from "@/components/shared/native-select";
+import { ScheduleAppointmentDialog } from "@/features/appointments/components/schedule-appointment-dialog";
 import { markLost, markWon, moveStage } from "@/features/pipeline/actions";
 import { LOST_REASON_LABELS, STAGE_LABELS, WORK_TYPE_LABELS, OPEN_STAGES } from "@/lib/deal-status";
 import type { StaffOption } from "@/lib/settings";
@@ -29,6 +30,7 @@ type DialogState =
   | { kind: "gate"; deal: MovableDeal; toStage: OpenStage; missing: string[] }
   | { kind: "won"; deal: MovableDeal }
   | { kind: "lost"; deal: MovableDeal }
+  | { kind: "inspection"; deal: MovableDeal }
   | null;
 
 /**
@@ -36,7 +38,19 @@ type DialogState =
  * right dialog when more is needed (spec §5.5). `onOptimistic` lets the board show the card in its
  * new column while the request runs.
  */
-export function useDealMoves({ staff, onOptimistic }: { staff: StaffOption[]; onOptimistic?: (dealId: string, stage: MoveTarget) => void }) {
+export function useDealMoves({
+  staff,
+  users,
+  today,
+  onOptimistic,
+}: {
+  staff: StaffOption[];
+  /** Everyone who can be sent to an appointment (includes field users). */
+  users: StaffOption[];
+  /** Today in the company timezone (yyyy-MM-dd), the default appointment date. */
+  today: string;
+  onOptimistic?: (dealId: string, stage: MoveTarget) => void;
+}) {
   const [dialog, setDialog] = useState<DialogState>(null);
   const [pending, startTransition] = useTransition();
 
@@ -48,7 +62,10 @@ export function useDealMoves({ staff, onOptimistic }: { staff: StaffOption[]; on
       const result = await moveStage({ opportunityId: deal.id, customerId: deal.customerId, toStage: target });
       if (result.ok) return;
       if (result.error.code === "missing_requirements") {
-        setDialog({ kind: "gate", deal, toStage: target, missing: Object.keys(result.error.fields ?? {}) });
+        const missing = Object.keys(result.error.fields ?? {});
+        // Only an inspection is missing: scheduling one moves the deal, so go straight to that.
+        if (missing.length === 1 && missing[0] === "inspection") setDialog({ kind: "inspection", deal });
+        else setDialog({ kind: "gate", deal, toStage: target, missing });
       } else {
         toast.error(result.error.message);
       }
@@ -67,6 +84,13 @@ export function useDealMoves({ staff, onOptimistic }: { staff: StaffOption[]; on
       <Dialog open={dialog?.kind === "lost"} onOpenChange={(open) => !open && close()}>
         <DialogContent>{dialog?.kind === "lost" ? <LostForm deal={dialog.deal} onDone={close} /> : null}</DialogContent>
       </Dialog>
+      {dialog?.kind === "inspection" ? (
+        <ScheduleAppointmentDialog
+          defaults={{ opportunityId: dialog.deal.id, dealLabel: `${dialog.deal.name}. Scheduling an inspection moves the deal to Inspection Scheduled.`, type: "inspection", date: today }}
+          users={users}
+          controlled={{ open: true, onOpenChange: (open) => !open && close() }}
+        />
+      ) : null}
     </>
   );
 
@@ -152,7 +176,7 @@ function GateForm({ deal, toStage, missing, staff, onDone }: { deal: MovableDeal
           </fieldset>
         ) : null}
         {needs("inspection") ? (
-          <p className="rounded-md border bg-muted p-3">This stage needs a scheduled inspection. Schedule one from the deal page, and the deal moves here automatically.</p>
+          <p className="rounded-md border bg-muted p-3">This stage also needs a scheduled inspection. Save the details above, then schedule one from the deal page; the deal moves here automatically.</p>
         ) : null}
         {needs("estimate") ? (
           <p className="rounded-md border bg-muted p-3">This stage needs an estimate that has been sent. Sending one from the deal page moves the deal here automatically.</p>

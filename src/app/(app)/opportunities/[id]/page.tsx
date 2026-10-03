@@ -7,6 +7,9 @@ import { DealSummaryCard } from "@/components/shared/deal-summary-card";
 import { NoteComposer } from "@/components/shared/note-composer";
 import { TaskList, type TaskItem } from "@/components/shared/task-list";
 import { Timeline, type TimelineItem } from "@/components/shared/timeline";
+import { AppointmentRow } from "@/features/appointments/components/appointment-dialog";
+import { ScheduleAppointmentDialog } from "@/features/appointments/components/schedule-appointment-dialog";
+import { listAppointments, todayRange } from "@/features/appointments/queries";
 import { LogContactDialog } from "@/features/leads/components/log-contact-dialog";
 import { OwnerSelect } from "@/features/leads/components/owner-select";
 import { listLeadSources } from "@/features/leads/queries";
@@ -38,6 +41,8 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   ]);
   if (!detail) notFound();
   const { deal, activities, notes, tasks, duplicateOf } = detail;
+  const appointments = await listAppointments(null, null, timeZone, { opportunityId: deal.id, includeClosed: true });
+  const { today } = todayRange(timeZone);
 
   const customerName = `${deal.customer.first_name} ${deal.customer.last_name}`.trim();
   const path = `/opportunities/${deal.id}`;
@@ -77,7 +82,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
           </Link>
           <h1 className="text-xl font-semibold">{deal.title}</h1>
         </div>
-        <DealStageControls deal={movable} stage={deal.stage} staff={staff} />
+        <DealStageControls deal={movable} stage={deal.stage} staff={staff} users={users} today={today} />
         {deal.stage === "lost" ? (
           <p className="text-muted-foreground">
             Lost: {deal.lost_reason ? LOST_REASON_LABELS[deal.lost_reason] : "no reason"}
@@ -109,6 +114,29 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
             <TaskList tasks={taskItems} revalidate={path} emptyText={open ? "No next step set." : "No open tasks."} />
           </section>
 
+          <section aria-label="Appointments" className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Appointments</h2>
+              {open ? (
+                <ScheduleAppointmentDialog
+                  defaults={{ opportunityId: deal.id, dealLabel: customerName, date: today, assigneeId: deal.owner_id, type: appointments.some((a) => a.type === "inspection" && a.status !== "cancelled" && a.status !== "no_show") ? "other" : "inspection" }}
+                  users={users}
+                />
+              ) : null}
+            </div>
+            {appointments.length === 0 ? (
+              <p className="text-muted-foreground">Nothing scheduled.</p>
+            ) : (
+              <ul className="divide-y overflow-hidden rounded-md border">
+                {appointments.map((item) => (
+                  <li key={item.id}>
+                    <AppointmentRow item={item} permissions={{ isStaff: true, userId: me.id }} users={users} showDay />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
           <section aria-label="Owner" className="space-y-2">
             <h2 className="font-semibold">Owner</h2>
             <OwnerSelect opportunityId={deal.id} customerId={deal.customer_id} ownerId={deal.owner_id} staff={staff} />
@@ -137,7 +165,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
             />
           </section>
 
-          {/* Appointments (phase 6), files (phase 7), and estimates (phase 9) add their panels here. */}
+          {/* Files (phase 7) and estimates (phase 9) add their panels here. */}
         </div>
       </div>
     </>

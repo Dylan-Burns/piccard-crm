@@ -1636,11 +1636,23 @@ export type Database = {
         Args: { p_opportunity_id: string; p_owner_id: string }
         Returns: Json
       }
+      cancel_appointment: {
+        Args: { p_appointment_id: string; p_reason?: string }
+        Returns: Json
+      }
       change_opportunity_stage: {
         Args: {
           p_fill?: Json
           p_opportunity_id: string
           p_to_stage: Database["public"]["Enums"]["opportunity_stage"]
+        }
+        Returns: Json
+      }
+      complete_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_outcome_notes?: string
+          p_status: Database["public"]["Enums"]["appointment_status"]
         }
         Returns: Json
       }
@@ -1682,6 +1694,16 @@ export type Database = {
         }
         Returns: Json
       }
+      reschedule_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_assigned_to?: string
+          p_ends_at: string
+          p_starts_at: string
+        }
+        Returns: Json
+      }
+      schedule_appointment: { Args: { p: Json }; Returns: Json }
       set_task_status: {
         Args: {
           p_status: Database["public"]["Enums"]["task_status"]

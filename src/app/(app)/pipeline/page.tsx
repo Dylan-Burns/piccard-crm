@@ -10,7 +10,8 @@ import { PipelineBoard } from "@/features/pipeline/components/board";
 import { getBoard } from "@/features/pipeline/queries";
 import { requireRole } from "@/lib/auth";
 import { WORK_TYPE_LABELS } from "@/lib/deal-status";
-import { getTimeZone, listStaffOptions } from "@/lib/settings";
+import { todayRange } from "@/features/appointments/queries";
+import { getTimeZone, listStaffOptions, listUserOptions } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Pipeline" };
 
@@ -28,7 +29,7 @@ export default async function PipelinePage({ searchParams }: PageProps<"/pipelin
   };
 
   const timeZone = await getTimeZone();
-  const [deals, staff, sources] = await Promise.all([getBoard(filters, timeZone), listStaffOptions(), listLeadSources()]);
+  const [deals, staff, users, sources] = await Promise.all([getBoard(filters, timeZone), listStaffOptions(), listUserOptions(), listLeadSources()]);
 
   return (
     <>
@@ -75,7 +76,7 @@ export default async function PipelinePage({ searchParams }: PageProps<"/pipelin
           Apply
         </Button>
       </form>
-      <PipelineBoard deals={deals} staff={staff} />
+      <PipelineBoard deals={deals} staff={staff} users={users} today={todayRange(timeZone).today} />
     </>
   );
 }

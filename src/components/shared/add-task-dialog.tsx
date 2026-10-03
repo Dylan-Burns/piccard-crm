@@ -3,9 +3,10 @@
 import { useActionState, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DialogTriggerSlot } from "@/components/shared/dialog-trigger-slot";
 import { FieldError } from "@/components/shared/field-error";
 import { NativeSelect } from "@/components/shared/native-select";
 import { useActionToast } from "@/components/shared/use-action-toast";
@@ -38,14 +39,14 @@ export function AddTaskDialog({
         setOpen(next);
       }}
     >
-      <DialogTrigger asChild>
+      <DialogTriggerSlot>
         {trigger ?? (
           <Button variant="outline" className="h-11 md:h-9">
             <Plus className="size-4" aria-hidden />
             Add task
           </Button>
         )}
-      </DialogTrigger>
+      </DialogTriggerSlot>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add task</DialogTitle>

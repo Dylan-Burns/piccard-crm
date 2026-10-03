@@ -93,3 +93,16 @@ One line per decision made where `docs/spec.md` was silent.
 - `scripts/import-csv.ts`: dry run by default, `--commit` to write; targets whichever Supabase URL/secret key are in the environment.
 - `@react-email/components` prints a deprecation notice on install (the project is moving to the `react-email` package); it works and is the package the spec names.
 - ESLint ignores unused arguments that start with `_` (server actions used with `useActionState` must accept both parameters).
+
+## Phase 6 (2026-10-03)
+- `schedule_appointment` checks the Qualified gate before inserting an inspection on an early-stage deal, then moves the deal with `apply_stage_change`. Assignee defaults to the deal owner.
+- A cancelled or no-show inspection sends the deal back to Qualified unless another inspection is scheduled or completed (`private.after_inspection_lost`). A completed inspection keeps the deal in Inspection Scheduled and creates the `send_estimate` task.
+- `complete_appointment` raises the same "not allowed" for a missing appointment and for one that is not the caller's, so ids cannot be probed.
+- Calendar: plain yyyy-MM-dd day strings in the company timezone; day arithmetic in UTC (`lib/dates.ts`). Week view is Sunday–Saturday day columns (not an hour grid); month view is desktop only; phones always show the agenda. Staff drag a scheduled appointment to another day in week view (same local time).
+- Dropping a deal on Inspection Scheduled when only the inspection is missing opens the schedule dialog directly.
+- Closing an appointment raises its toast from the submit handler, because the row can leave the page (and unmount) before an effect-based toast would run. The same applies to any action that removes its own trigger from the page.
+- Draggable wrappers around a button use `role="group"` so buttons do not nest.
+- Inspection confirmation email goes to the customer on schedule and reschedule when the setting is on and they have an email (dedupe key includes the start time). Daily task digest: one email per user per business day; cron runs once a day (`vercel.json`).
+- `/today` shows the field user's appointments, assigned jobs (scheduled / in progress), and tasks. "Add photos" is disabled until Phase 7; jobs are not links until Phase 8.
+- The customer page schedules from each open deal card (next to "Log contact"), since appointments always belong to a deal; the appointment list itself lives on the deal page and the card shows the inspection line.
+- Dialogs that take a `trigger` element from a Server Component render it through `components/shared/dialog-trigger-slot.tsx`. The element can arrive as a lazy reference nested two deep, and Radix Slot unwraps only one level ("Primitive.button failed to slot onto its children"), which crashed the customer and Today pages intermittently.

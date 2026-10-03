@@ -3,9 +3,10 @@
 import { useActionState, useState } from "react";
 import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogTriggerSlot } from "@/components/shared/dialog-trigger-slot";
 import { useActionToast } from "@/components/shared/use-action-toast";
 import { logContact } from "@/features/leads/actions";
 import { cn } from "@/lib/utils";
@@ -56,14 +57,14 @@ export function LogContactDialog({
         setOpen(next);
       }}
     >
-      <DialogTrigger asChild>
+      <DialogTriggerSlot>
         {trigger ?? (
           <Button variant="outline" className="h-11 md:h-9">
             <Phone className="size-4" aria-hidden />
             Log contact
           </Button>
         )}
-      </DialogTrigger>
+      </DialogTriggerSlot>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Log contact</DialogTitle>

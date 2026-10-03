@@ -86,17 +86,28 @@ describe("field", () => {
   });
 
   it("sees exactly the customers, properties, jobs, and appointments tied to their assignments", async () => {
-    const { data: customers } = await field.from("customers").select("id");
-    expect(customers!.map((c) => c.id).sort()).toEqual([fx.inspectionDeal.customer_id, fx.wonDeal.customer_id].sort());
+    // Expected rows are derived with the service client, because e2e runs leave appointments
+    // assigned to this user. The seed fixtures must always be among them.
+    const { data: live } = await service.from("appointments").select("id, customer_id, opportunity_id").eq("assigned_to", fieldId).in("status", ["scheduled", "completed"]);
+    const { data: assigned } = await service.from("job_assignments").select("job:jobs!inner(id, customer_id)").eq("user_id", fieldId);
+    const customerIds = [...new Set([...live!.map((a) => a.customer_id), ...assigned!.map((a) => a.job.customer_id)])].sort();
+    expect(customerIds).toEqual(expect.arrayContaining([fx.inspectionDeal.customer_id, fx.wonDeal.customer_id]));
 
-    const { data: properties } = await field.from("properties").select("customer_id");
-    expect(properties).toHaveLength(3); // John Smith has two properties
+    const { data: customers } = await field.from("customers").select("id");
+    expect(customers!.map((c) => c.id).sort()).toEqual(customerIds);
+
+    const { data: properties } = await field.from("properties").select("id");
+    const { data: expectedProperties } = await service.from("properties").select("id").in("customer_id", customerIds);
+    expect(properties!.map((p) => p.id).sort()).toEqual(expectedProperties!.map((p) => p.id).sort());
+    expect(properties!.length).toBeGreaterThanOrEqual(3); // John Smith has two properties
 
     const { data: jobs } = await field.from("jobs").select("id");
     expect(jobs).toEqual([{ id: fx.jobId }]);
 
-    const { data: appointments } = await field.from("appointments").select("opportunity_id, assigned_to");
-    expect(appointments).toEqual([{ opportunity_id: fx.inspectionDeal.id, assigned_to: fieldId }]);
+    const { data: appointments } = await field.from("appointments").select("id, opportunity_id, assigned_to");
+    expect(appointments!.map((a) => a.id).sort()).toEqual(live!.map((a) => a.id).sort());
+    expect(appointments!.every((a) => a.assigned_to === fieldId)).toBe(true);
+    expect(appointments!.map((a) => a.opportunity_id)).toContain(fx.inspectionDeal.id);
   });
 
   it("another field user with no assignments sees nothing", async () => {

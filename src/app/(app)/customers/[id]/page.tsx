@@ -8,6 +8,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { NoteComposer } from "@/components/shared/note-composer";
 import { TaskList, type TaskItem } from "@/components/shared/task-list";
 import { MilestoneStrip, Timeline, type TimelineItem } from "@/components/shared/timeline";
+import { ScheduleAppointmentDialog } from "@/features/appointments/components/schedule-appointment-dialog";
+import { todayRange } from "@/features/appointments/queries";
 import { EditCustomerDialog, PropertyDialog } from "@/features/customers/components/customer-dialogs";
 import { CustomerFab } from "@/features/customers/components/customer-fab";
 import { CustomerPanels } from "@/features/customers/components/customer-panels";
@@ -79,6 +81,7 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
   const maps = fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null;
   // Default due time for a new task: tomorrow 9:00 in the company timezone.
   const defaultDue = tomorrowAtNine(timeZone);
+  const { today } = todayRange(timeZone);
   const noteParent = primaryDeal ? { opportunity_id: primaryDeal.id } : { customer_id: customer.id };
 
   return (
@@ -122,16 +125,33 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
                 href={`/opportunities/${deal.id}`}
                 actions={
                   bucket(deal) === "open" ? (
-                    <LogContactDialog
-                      opportunityId={deal.id}
-                      customerId={customer.id}
-                      customerName={name}
-                      trigger={
-                        <Button variant="outline" className="h-11 md:h-8">
-                          Log contact
-                        </Button>
-                      }
-                    />
+                    <>
+                      <LogContactDialog
+                        opportunityId={deal.id}
+                        customerId={customer.id}
+                        customerName={name}
+                        trigger={
+                          <Button variant="outline" className="h-11 md:h-8">
+                            Log contact
+                          </Button>
+                        }
+                      />
+                      <ScheduleAppointmentDialog
+                        defaults={{
+                          opportunityId: deal.id,
+                          dealLabel: `${name} — ${deal.title}`,
+                          date: today,
+                          assigneeId: deal.owner_id,
+                          type: deal.appointments.some((a) => a.type === "inspection" && (a.status === "scheduled" || a.status === "completed")) ? "other" : "inspection",
+                        }}
+                        users={users}
+                        trigger={
+                          <Button variant="outline" className="h-11 md:h-8">
+                            Schedule
+                          </Button>
+                        }
+                      />
+                    </>
                   ) : null
                 }
               />

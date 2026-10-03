@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogTriggerSlot } from "@/components/shared/dialog-trigger-slot";
 import { FieldError } from "@/components/shared/field-error";
 import { NativeSelect } from "@/components/shared/native-select";
 import { useActionToast } from "@/components/shared/use-action-toast";
@@ -27,7 +28,7 @@ export function EditCustomerDialog({ customer, trigger }: { customer: CustomerVa
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogTriggerSlot>{trigger}</DialogTriggerSlot>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit contact details</DialogTitle>
@@ -93,7 +94,7 @@ export function PropertyDialog({ customerId, property, trigger }: { customerId: 
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogTriggerSlot>{trigger}</DialogTriggerSlot>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{property ? "Edit property" : "Add property"}</DialogTitle>

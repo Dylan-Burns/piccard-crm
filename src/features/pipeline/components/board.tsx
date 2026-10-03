@@ -13,7 +13,7 @@ import { formatCents } from "@/lib/money";
 import type { StaffOption } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
-export function PipelineBoard({ deals, staff }: { deals: BoardDeal[]; staff: StaffOption[] }) {
+export function PipelineBoard({ deals, staff, users, today }: { deals: BoardDeal[]; staff: StaffOption[]; users: StaffOption[]; today: string }) {
   // The card shows in its new column while the request runs; when it finishes, React falls back to
   // the server's data (refreshed on success, unchanged on failure, which is the "revert").
   const [shown, setOptimistic] = useOptimistic(deals, (state, change: { id: string; stage: OpenStage }) =>
@@ -21,6 +21,8 @@ export function PipelineBoard({ deals, staff }: { deals: BoardDeal[]; staff: Sta
   );
   const { move, dialogs } = useDealMoves({
     staff,
+    users,
+    today,
     onOptimistic: (id, stage) => {
       if (stage !== "won" && stage !== "lost") setOptimistic({ id, stage });
     },

@@ -15,8 +15,8 @@ import type { Database } from "@/types/database";
 type Stage = Database["public"]["Enums"]["opportunity_stage"];
 
 /** Stage stepper with move, Won, Lost, and Reopen (spec §5.4). */
-export function DealStageControls({ deal, stage, staff }: { deal: MovableDeal; stage: Stage; staff: StaffOption[] }) {
-  const { move, dialogs, pending } = useDealMoves({ staff });
+export function DealStageControls({ deal, stage, staff, users, today }: { deal: MovableDeal; stage: Stage; staff: StaffOption[]; users: StaffOption[]; today: string }) {
+  const { move, dialogs, pending } = useDealMoves({ staff, users, today });
   const [reopening, startReopen] = useTransition();
   const currentIndex = OPEN_STAGES.indexOf(stage as OpenStage);
   const closed = stage === "won" || stage === "lost";
