@@ -29,3 +29,36 @@ export async function signInAs(email: string): Promise<{ client: Client; userId:
   if (error || !data.user) throw new Error(`Sign-in failed for ${email}: ${error?.message}. Did you run \`pnpm seed\`?`);
   return { client, userId: data.user.id };
 }
+
+import { FIXTURES } from "../../scripts/seed-data";
+
+/** Looks up the seeded fixture rows by name (see scripts/seed-data.ts). */
+export async function loadFixtures() {
+  const service = serviceClient();
+  const { data: deals, error } = await service
+    .from("opportunities")
+    .select("id, title, customer_id, property_id, stage, owner_id")
+    .in("title", Object.values(FIXTURES));
+  if (error || !deals || deals.length !== Object.keys(FIXTURES).length) {
+    throw new Error("Seed fixtures missing. Run `supabase db reset && pnpm seed`.");
+  }
+  const byTitle = (title: string) => deals.find((d) => d.title === title)!;
+  const wonDeal = byTitle(FIXTURES.wonDeal);
+  const { data: job } = await service.from("jobs").select("id").eq("opportunity_id", wonDeal.id).single();
+  return {
+    inspectionDeal: byTitle(FIXTURES.inspectionDeal),
+    wonDeal,
+    unassignedDeal: byTitle(FIXTURES.unassignedDeal),
+    estimateDeal: byTitle(FIXTURES.estimateDeal),
+    jobId: job!.id,
+  };
+}
+
+export const ALL_TABLES = [
+  "profiles", "company_settings", "lead_sources", "customers", "properties", "opportunities",
+  "opportunity_stage_history", "lead_submissions", "price_book_items", "estimates", "estimate_line_items",
+  "jobs", "job_assignments", "appointments", "invoices", "invoice_line_items", "notes", "files",
+  "activities", "tasks", "integration_connections", "sync_outbox", "email_log",
+] as const;
+
+export const PERMISSION_DENIED = "42501";

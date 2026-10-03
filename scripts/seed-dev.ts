@@ -1,10 +1,11 @@
 /**
- * Dev seed: creates the three test users and sets their roles.
+ * Dev seed: creates the test users, sets their roles, and inserts sample CRM data.
  * Local Supabase only. Run with `pnpm seed` after `supabase db reset`.
  */
 import { createClient } from "@supabase/supabase-js";
 import { config as loadEnv } from "dotenv";
 import type { Database } from "../src/types/database";
+import { seedData } from "./seed-data";
 
 loadEnv({ path: ".env.local", quiet: true });
 
@@ -22,6 +23,7 @@ export const SEED_USERS = [
   { email: "admin@test.local", full_name: "Alex Admin", role: "admin" },
   { email: "sales@test.local", full_name: "Sam Sales", role: "sales" },
   { email: "field@test.local", full_name: "Fran Field", role: "field" },
+  { email: "field2@test.local", full_name: "Finn Field", role: "field" },
   // Used only by the password-reset e2e test, which changes this user's password.
   { email: "reset@test.local", full_name: "Rae Reset", role: "field" },
 ] as const;
@@ -32,6 +34,7 @@ async function main() {
   const { data: existing, error: listError } = await admin.auth.admin.listUsers({ perPage: 200 });
   if (listError) throw listError;
 
+  const ids: Record<string, string> = {};
   for (const user of SEED_USERS) {
     let id = existing.users.find((u) => u.email === user.email)?.id;
     if (!id) {
@@ -53,8 +56,16 @@ async function main() {
       .update({ role: user.role, full_name: user.full_name, is_active: true })
       .eq("id", id);
     if (error) throw error;
+    ids[user.email] = id;
     console.log(`seeded ${user.email} (${user.role})`);
   }
+
+  await seedData(admin, {
+    admin: ids["admin@test.local"]!,
+    sales: ids["sales@test.local"]!,
+    field: ids["field@test.local"]!,
+    field2: ids["field2@test.local"]!,
+  });
 }
 
 main().catch((error) => {

@@ -118,8 +118,10 @@ test("forgot password emails a working reset link", async ({ page }, testInfo) =
   await page.goto(await latestEmailLink("reset@test.local"));
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/set-password/);
-  await page.getByLabel("New password").fill("Password123!x");
-  await page.getByLabel("Confirm password").fill("Password123!x");
+  // Unique per run: Supabase rejects a reset to the current password.
+  const newPassword = `Reset-${Date.now()}!a`;
+  await page.getByLabel("New password").fill(newPassword);
+  await page.getByLabel("Confirm password").fill(newPassword);
   await page.getByRole("button", { name: "Save password" }).click();
   await expect(page).toHaveURL(/\/today/);
 });

@@ -43,3 +43,15 @@ One line per decision made where `docs/spec.md` was silent.
 - `/auth/confirm` is a page with a Continue button (POST), not a GET route: prevents login CSRF and link consumption by email scanners. Invite/reset links take their host from the request only when it matches a known origin (`resolveOrigin` in `lib/env.ts`), otherwise from the configured app URL.
 - Phase 1 merged to `main` and deployed. Production: https://piccard-crm.vercel.app (`NEXT_PUBLIC_APP_URL` set for Production). Migration 0001 applied to production. Production auth: site URL and redirect allow-list set to the production origin; sign-ups disabled. Owner admin accounts created on staging and production via one-time invite links.
 - `supabase db push` prints a `pgdelta … ca.crt` error after applying; the migration still applies (confirmed with `supabase migration list`). The CLI stays linked to whichever project was pushed last; re-link before each push.
+
+## Phase 2 (2026-10-03)
+- `0002_schema.sql` and `0003_rls.sql` are assembled from the SQL blocks in `docs/spec.md` §2.2–§2.7 and §3.3; triggers follow §2.9. All 23 tables have RLS; no function is executable by `anon`; no `security definer` function lacks `search_path = ''` (checks in spec §9 Phase 2 return zero rows).
+- `fill_parent_ids` takes an argument: `'required'` (notes, files, activities) raises when no customer resolves, `'optional'` (tasks) does not. Appointments use `fill_appointment_parent_ids`, which also fills `property_id`.
+- The sent-estimate lock allows line deletes when the parent estimate row is already gone, so deleting a deal still cascades.
+- `calendar_connected()` helper gates the two calendar triggers; with no connection row they do nothing.
+- Column grants are role-wide, so some denials come from RLS rather than privileges: a field user's direct `tasks.due_at` update affects zero rows (no error), and a sales insert into `lead_sources` fails the policy check. Both are tested as "data unchanged".
+- Generated Insert types require `customer_id` on attachment tables even though the trigger fills it. `src/lib/supabase/inserts.ts` provides `attach<T>()` so callers pass only the most specific parent id.
+- PostgREST bulk inserts send null for keys missing from some rows; give every row the same keys (hit in the seed with `is_taxable`).
+- Seed data lives in `scripts/seed-data.ts` with named fixtures (`FIXTURES`) that the tests look up. It is not transactional: run `supabase db reset` before reseeding. Added `field2@test.local` (a field user with no assignments).
+- The password-reset e2e test uses a unique password per run (Supabase rejects a reset to the current password).
+- Running `pnpm e2e` immediately after `pnpm build` once produced timeouts while the dev server cold-started; a rerun passed. If it recurs, start `pnpm dev` first.
