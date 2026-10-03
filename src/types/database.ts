@@ -1671,6 +1671,10 @@ export type Database = {
         }
         Returns: Json
       }
+      process_lead_submission: {
+        Args: { p_lead: Json; p_submission_id: string }
+        Returns: Json
+      }
       reopen_opportunity: {
         Args: {
           p_opportunity_id: string

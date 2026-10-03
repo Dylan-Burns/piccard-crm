@@ -5,6 +5,10 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    // Server actions used with useActionState must accept (prevState, formData) even when unused.
+    rules: { "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }] },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -12,6 +16,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 

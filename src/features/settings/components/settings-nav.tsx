@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/settings/company", label: "Company", adminOnly: true },
   { href: "/settings/users", label: "Users", adminOnly: true },
   { href: "/settings/lead-sources", label: "Lead sources", adminOnly: true },
+  { href: "/settings/integrations", label: "Integrations", adminOnly: true },
 ];
 
 export function SettingsNav({ isAdmin }: { isAdmin: boolean }) {

@@ -79,3 +79,17 @@ One line per decision made where `docs/spec.md` was silent.
 - Phone board: stage chips with counts, horizontal swipe changes stage, each card has a Move button that opens a sheet. No dragging on touch.
 - Deal cards and the leads inbox now link to `/opportunities/[id]`. The deal page has placeholders in code comments for appointments (phase 6), files (phase 7), and estimates (phase 9).
 - Radix dialogs set `aria-hidden` on the rest of the page; browser tests must not query the page by role while a dialog is open.
+
+## Phase 5 (2026-10-03)
+- Webhooks follow the store-first rule: authenticate → per-IP rate limit (10/minute, counted from `lead_submissions`) → parse → insert the raw payload → 200; 503 if the insert fails. Processing runs in `after()`. Logic is in `features/leads/ingest.ts` so it is testable without an HTTP request.
+- The delivery id is the sender's (`submission_id` / Google `lead_id`) or a SHA-256 of the raw body plus the UTC date.
+- Normalization (TypeScript) can reject a submission (honeypot, Google test lead, no name, no phone or email); the row is marked `rejected` with the reason.
+- `process_lead_submission` (0007) wraps `create_lead`; an exception marks the submission `error` and the retry sweep picks it up (max 5 attempts).
+- Email: `lib/integrations/resend.ts` implements the email_log outbox with an injectable sender for tests. With no `RESEND_API_KEY`/`EMAIL_FROM`, sends are recorded as `failed` ("Email is not configured") and retried later. Templates are registered by name in `src/emails/templates.tsx` so retries render from stored props.
+- New-lead email goes to the deal owner, else the longest-standing active admin. A manual lead notifies only when the person entering it is not the owner.
+- `/api/cron/process-outbox` retries stuck submissions and emails. `vercel.json` schedules it once a day because the Hobby plan rejects more frequent crons; change to `*/5 * * * *` after upgrading to Pro. Admins can also press "Retry failed items" in Settings → Integrations.
+- Vercel env: `CRON_SECRET`, `LEAD_WEBHOOK_SECRET`, `GOOGLE_ADS_WEBHOOK_KEY` (readable in the dashboard so they can be copied to the website and Google Ads) and `INTEGRATION_ENCRYPTION_KEY` (sensitive) were generated for Production and Preview. Local test values are in `.env.local`.
+- Settings → Integrations never shows a secret; it names the Vercel variable to copy. Website setup instructions are server-side only.
+- `scripts/import-csv.ts`: dry run by default, `--commit` to write; targets whichever Supabase URL/secret key are in the environment.
+- `@react-email/components` prints a deprecation notice on install (the project is moving to the `react-email` package); it works and is the package the spec names.
+- ESLint ignores unused arguments that start with `_` (server actions used with `useActionState` must accept both parameters).

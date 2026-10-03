@@ -1,13 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { assignOwnerSchema, leadFormSchema, logContactSchema } from "@/features/leads/schemas";
 import { currentProfileWithRole } from "@/lib/auth";
 import { toE164 } from "@/lib/phone";
 import { fail, fieldErrors, ok, type ActionResult } from "@/lib/result";
 import { unwrapRpc, type RpcResult } from "@/lib/rpc";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { notifyLead } from "@/features/leads/ingest";
 
 const NOT_ALLOWED = fail("forbidden", "You do not have permission to do that");
 
@@ -29,8 +32,27 @@ export async function createLead(_prev: ActionResult | null, formData: FormData)
   const response = await supabase.rpc("create_lead", {
     p: { ...input, channel: "manual", phone_e164: toE164(input.phone) },
   });
-  const result = unwrapRpc<RpcResult & { customer_id: string }>(response);
+  const result = unwrapRpc<RpcResult & { customer_id: string; opportunity_id: string; owner_id: string | null; status: string }>(response);
   if (!result.ok) return result;
+
+  // Tell the owner about a lead someone else entered for them. Runs after the response.
+  if (result.data.owner_id !== me.id) {
+    const { opportunity_id, status } = result.data;
+    after(async () => {
+      const db = createAdminClient();
+      const { data: customer } = await db.from("customers").select("first_name, last_name, phone").eq("id", result.data.customer_id).maybeSingle();
+      const { data: source } = input.source_id ? await db.from("lead_sources").select("name").eq("id", input.source_id).maybeSingle() : { data: null };
+      await notifyLead(db, opportunity_id, { ok: true, status, opportunity_id }, {
+        first_name: customer?.first_name ?? input.first_name,
+        last_name: customer?.last_name ?? input.last_name,
+        phone: customer?.phone ?? input.phone,
+        work_type: input.work_type,
+        address_line1: input.address_line1,
+        source_name: source?.name ?? "",
+        message: input.message,
+      });
+    });
+  }
 
   revalidateDeal(result.data.customer_id);
   redirect(`/customers/${result.data.customer_id}`);
