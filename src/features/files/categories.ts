@@ -43,6 +43,21 @@ export function extensionFor(mimeType: string): string | null {
 
 export const isImage = (mimeType: string) => mimeType.startsWith("image/");
 
+/** Whether a file's first bytes are what its type claims. A declared type alone proves nothing. */
+export function contentMatchesType(head: Uint8Array, mimeType: string): boolean {
+  const ascii = (start: number, end: number) => String.fromCharCode(...head.slice(start, end));
+  switch (mimeType) {
+    case "image/jpeg": return head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+    case "image/png": return head[0] === 0x89 && ascii(1, 4) === "PNG";
+    case "image/gif": return ascii(0, 4) === "GIF8";
+    case "image/webp": return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
+    case "image/heic":
+    case "image/heif": return ascii(4, 8) === "ftyp";
+    case "application/pdf": return ascii(0, 5) === "%PDF-";
+    default: return false;
+  }
+}
+
 export function defaultCategory(mimeType: string): FileCategory {
   return isImage(mimeType) ? "photo" : "other";
 }

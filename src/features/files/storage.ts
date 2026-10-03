@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BUCKET, extensionFor, isImage, type FileCategory } from "@/features/files/categories";
+import { BUCKET, contentMatchesType, extensionFor, isImage, type FileCategory } from "@/features/files/categories";
 import type { CreateUploadUrlsInput, RegisterFilesInput } from "@/features/files/schemas";
 import type { UserRole } from "@/lib/auth";
 import { fail, ok, type ActionResult } from "@/lib/result";
@@ -20,7 +20,7 @@ const NOT_ALLOWED = fail("forbidden", "You do not have permission to do that");
 const SIGNED_URL_SECONDS = 3600;
 const THUMBNAIL = { width: 400, height: 400, resize: "cover" as const, quality: 70 };
 
-type Target = { opportunityId?: string; customerId?: string; appointmentId?: string };
+type Target = { opportunityId?: string; customerId?: string; jobId?: string; appointmentId?: string };
 
 /**
  * Finds the customer behind an upload target, or null when the caller may not upload there.
@@ -28,10 +28,14 @@ type Target = { opportunityId?: string; customerId?: string; appointmentId?: str
  * live appointment or a job; they cannot read `opportunities`, so the lookup goes through those tables.
  */
 async function resolveTarget({ supabase, profile }: FileContext, target: Target): Promise<{ customerId: string; opportunityId: string | null } | null> {
-  const { opportunityId, customerId, appointmentId } = target;
+  const { opportunityId, customerId, jobId, appointmentId } = target;
   let resolved: { customerId: string; opportunityId: string | null } | null = null;
 
-  if (profile.role === "field") {
+  if (jobId) {
+    // RLS returns the job to staff and to field users assigned to it.
+    const { data } = await supabase.from("jobs").select("customer_id, opportunity_id").eq("id", jobId).maybeSingle();
+    if (data) resolved = { customerId: data.customer_id, opportunityId: data.opportunity_id };
+  } else if (profile.role === "field") {
     if (!opportunityId) return null;
     const { data: appointment } = await supabase
       .from("appointments")
@@ -81,10 +85,37 @@ export async function createUploadSlots(ctx: FileContext, input: CreateUploadUrl
   return ok({ uploads });
 }
 
+/**
+ * Reads the first bytes of each stored object and compares them with the declared type. Storage
+ * only checks the type the uploader claimed, so this is where the content itself is looked at.
+ * Objects that fail are removed. Only paths under the caller's own target are inspected.
+ */
+async function rejectMismatchedContent(files: { storagePath: string; type: string }[]): Promise<boolean> {
+  const storage = createAdminClient().storage.from(BUCKET);
+  const bad: string[] = [];
+  await Promise.all(
+    files.map(async (file) => {
+      const { data } = await storage.createSignedUrl(file.storagePath, 60);
+      if (!data?.signedUrl) return; // not uploaded: register_files reports that
+      const response = await fetch(data.signedUrl, { headers: { Range: "bytes=0-15" } }).catch(() => null);
+      if (!response?.ok) return;
+      const head = new Uint8Array(await response.arrayBuffer()).slice(0, 16);
+      if (!contentMatchesType(head, file.type)) bad.push(file.storagePath);
+    }),
+  );
+  if (bad.length > 0) await storage.remove(bad);
+  return bad.length > 0;
+}
+
 /** Records uploaded objects through `register_files`, which checks access and the paths again. */
 export async function registerUploadedFiles(ctx: FileContext, input: RegisterFilesInput): Promise<ActionResult<{ count: number }>> {
+  const target = await resolveTarget(ctx, input);
+  if (!target) return NOT_ALLOWED;
+  const prefix = `${target.customerId}/${target.opportunityId ?? "_"}/`;
+  if (input.files.some((f) => !f.storagePath.startsWith(prefix))) return fail("invalid", "One of the files is not valid");
+  if (await rejectMismatchedContent(input.files)) return fail("invalid", "One of the files is not a photo or PDF");
   const p = {
-    ...(input.opportunityId ? { opportunity_id: input.opportunityId } : { customer_id: input.customerId }),
+    ...(input.jobId ? { job_id: input.jobId } : input.opportunityId ? { opportunity_id: input.opportunityId } : { customer_id: input.customerId }),
     ...(input.appointmentId ? { appointment_id: input.appointmentId } : {}),
     files: input.files.map((f) => ({ id: f.id, storage_path: f.storagePath, file_name: f.name, mime_type: f.type, size_bytes: f.size, category: f.category })),
   };

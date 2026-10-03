@@ -91,6 +91,11 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
           <h1 className="text-xl font-semibold">{deal.title}</h1>
         </div>
         <DealStageControls deal={movable} stage={deal.stage} staff={staff} users={users} today={today} />
+        {deal.jobs ? (
+          <Link href={`/jobs/${deal.jobs.id}`} className="inline-flex min-h-11 items-center font-medium text-primary hover:underline md:min-h-0">
+            Open job J-{deal.jobs.job_number}
+          </Link>
+        ) : null}
         {deal.stage === "lost" ? (
           <p className="text-muted-foreground">
             Lost: {deal.lost_reason ? LOST_REASON_LABELS[deal.lost_reason] : "no reason"}

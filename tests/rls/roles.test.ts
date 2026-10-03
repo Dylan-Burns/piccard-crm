@@ -102,7 +102,8 @@ describe("field", () => {
     expect(properties!.length).toBeGreaterThanOrEqual(3); // John Smith has two properties
 
     const { data: jobs } = await field.from("jobs").select("id");
-    expect(jobs).toEqual([{ id: fx.jobId }]);
+    expect(jobs!.map((j) => j.id).sort()).toEqual(assigned!.map((a) => a.job.id).sort());
+    expect(jobs!.map((j) => j.id)).toContain(fx.jobId);
 
     const { data: appointments } = await field.from("appointments").select("id, opportunity_id, assigned_to");
     expect(appointments!.map((a) => a.id).sort()).toEqual(live!.map((a) => a.id).sort());

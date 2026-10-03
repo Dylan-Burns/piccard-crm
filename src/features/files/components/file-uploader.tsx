@@ -14,7 +14,7 @@ import { CATEGORY_LABELS, countLabel, defaultCategory, extensionFor, isImage, MA
 import type { UploadSlot } from "@/features/files/storage";
 
 /** Where uploads land. The uploader never works without one (spec §9 Phase 7, step 4). */
-export type UploadTarget = { opportunityId?: string; customerId?: string; appointmentId?: string };
+export type UploadTarget = { opportunityId?: string; customerId?: string; jobId?: string; appointmentId?: string };
 
 type Status = "preparing" | "waiting" | "uploading" | "uploaded" | "saved" | "failed";
 type Item = {

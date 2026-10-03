@@ -51,7 +51,10 @@ export async function registerFiles(input: unknown): Promise<ActionResult<{ coun
   const parsed = registerFilesSchema.safeParse(input);
   if (!parsed.success) return fail("invalid", INVALID_MESSAGE);
   const result = await registerUploadedFiles(ctx, parsed.data);
-  if (result.ok) revalidate(parsed.data.opportunityId);
+  if (result.ok) {
+    revalidate(parsed.data.opportunityId);
+    if (parsed.data.jobId) revalidatePath(`/jobs/${parsed.data.jobId}`);
+  }
   return result;
 }
 

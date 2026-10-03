@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { CalendarCheck, Camera, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -101,11 +102,13 @@ export default async function TodayPage() {
             <h2 className="font-semibold">My jobs</h2>
             <ul className="divide-y rounded-md border">
               {jobs.data.map((job) => (
-                <li key={job.id} className="flex min-h-12 items-center justify-between gap-3 px-3 py-2">
-                  <span className="min-w-0 truncate font-medium">
-                    J-{job.job_number} · {job.title}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{job.status === "in_progress" ? "In progress" : "Scheduled"}</span>
+                <li key={job.id}>
+                  <Link href={`/jobs/${job.id}`} className="flex min-h-12 items-center justify-between gap-3 px-3 py-2 hover:bg-muted/50">
+                    <span className="min-w-0 truncate font-medium">
+                      J-{job.job_number} · {job.title}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{job.status === "in_progress" ? "In progress" : "Scheduled"}</span>
+                  </Link>
                 </li>
               ))}
             </ul>

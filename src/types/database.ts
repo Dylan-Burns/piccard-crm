@@ -1705,6 +1705,23 @@ export type Database = {
         Returns: Json
       }
       schedule_appointment: { Args: { p: Json }; Returns: Json }
+      schedule_job: {
+        Args: {
+          p_assignees: string[]
+          p_days: string[]
+          p_end: string
+          p_job_id: string
+          p_start: string
+        }
+        Returns: Json
+      }
+      set_job_status: {
+        Args: {
+          p_job_id: string
+          p_status: Database["public"]["Enums"]["job_status"]
+        }
+        Returns: Json
+      }
       set_task_status: {
         Args: {
           p_status: Database["public"]["Enums"]["task_status"]

@@ -9,14 +9,15 @@ export const uploadFileSchema = z.object({
   size: z.number().int().positive().max(MAX_FILE_BYTES, "Files can be up to 25 MB"),
 });
 
-/** The record an upload lands on. Exactly one of deal or customer; the appointment is optional context. */
+/** The record an upload lands on. Exactly one of deal, job, or customer; the appointment is optional context. */
 export const uploadTargetSchema = z
   .object({
     opportunityId: uuid.optional(),
     customerId: uuid.optional(),
+    jobId: uuid.optional(),
     appointmentId: uuid.optional(),
   })
-  .refine((t) => Boolean(t.opportunityId) !== Boolean(t.customerId), "Choose a deal");
+  .refine((t) => [t.opportunityId, t.customerId, t.jobId].filter(Boolean).length === 1, "Choose a deal");
 
 export const createUploadUrlsSchema = uploadTargetSchema.and(
   z.object({ files: z.array(uploadFileSchema).min(1).max(MAX_FILES_PER_UPLOAD) }),
