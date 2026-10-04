@@ -86,14 +86,14 @@ function DesktopBoard({ byStage, wonCount, lostCount, deals, onMove }: { byStage
 function Column({ id, title, count, total, children }: { id: string; title: string; count: number; total: number; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <section aria-label={title} className="flex w-64 shrink-0 flex-col rounded-md bg-muted/60">
-      <header className="flex items-baseline justify-between gap-2 px-3 py-2">
+    <section aria-label={title} className="flex w-64 shrink-0 flex-col overflow-hidden rounded-md border bg-card">
+      <header className="flex items-baseline justify-between gap-2 border-b bg-secondary px-3 py-2">
         <h2 className="truncate font-semibold">
           {title} <span className="font-normal text-muted-foreground">{count}</span>
         </h2>
         <span className="shrink-0 text-xs text-muted-foreground tabular">{total ? formatCents(total) : ""}</span>
       </header>
-      <div ref={setNodeRef} className={cn("flex-1 space-y-2 overflow-y-auto rounded-md p-2 pt-0", isOver && "bg-primary/10 outline-2 outline-primary/40")}>
+      <div ref={setNodeRef} className={cn("flex-1 space-y-2 overflow-y-auto bg-muted/50 p-2", isOver && "bg-primary/10 outline-2 -outline-offset-2 outline-primary/40")}>
         {children}
       </div>
     </section>
@@ -107,7 +107,7 @@ function DropZone({ id, label, count, tone }: { id: "won" | "lost"; label: strin
       ref={setNodeRef}
       aria-label={label}
       className={cn(
-        "flex flex-1 flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed text-center",
+        "flex flex-1 flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed bg-card text-center",
         tone === "success" ? "border-success/40 text-success" : "border-destructive/40 text-destructive",
         isOver && (tone === "success" ? "bg-success/10" : "bg-destructive/10"),
       )}
