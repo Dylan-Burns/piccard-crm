@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
+import { notifyDealWon } from "@/features/estimates/notify";
 import { currentProfileWithRole } from "@/lib/auth";
 import { parseDollarsToCents } from "@/lib/money";
 import { toE164 } from "@/lib/phone";
@@ -89,6 +91,7 @@ export async function markWon(input: z.input<typeof wonSchema>): Promise<ActionR
     }),
   );
   if (!result.ok) return result;
+  if (!result.data.already) after(() => notifyDealWon(opportunityId));
   revalidateDeal(opportunityId, customerId);
   revalidatePath("/jobs");
   return ok({ jobNumber: result.data.job_number });

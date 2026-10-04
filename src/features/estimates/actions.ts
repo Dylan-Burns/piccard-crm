@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { loadLogo } from "@/features/estimates/pdf/logo";
 import { priceBookItemSchema, saveLinesSchema, updateEstimateSchema } from "@/features/estimates/schemas";
+import { resendEstimateEmailFlow, sendEstimateFlow, type SendResult } from "@/features/estimates/send";
 import { currentProfileWithRole } from "@/lib/auth";
 import { fail, fieldErrors, ok, type ActionResult } from "@/lib/result";
 import { unwrapRpc, type RpcResult } from "@/lib/rpc";
@@ -77,6 +79,37 @@ export async function voidEstimate(input: unknown): Promise<ActionResult> {
   if (!result.ok) return result;
   revalidate(parsed.data.opportunityId, parsed.data.estimateId);
   return ok();
+}
+
+/** Sends a draft to the customer (PDF snapshot, status and stage, then the email with the link). */
+export async function sendEstimate(input: unknown): Promise<ActionResult<SendResult>> {
+  if (!(await currentProfileWithRole("admin", "sales"))) return NOT_ALLOWED;
+  const parsed = z.object({ estimateId: z.uuid(), opportunityId: z.uuid() }).safeParse(input);
+  if (!parsed.success) return fail("invalid", "Unknown estimate");
+  const supabase = await createClient();
+  const { data: settings } = await supabase.from("company_settings").select("logo_path").maybeSingle();
+  const result = await sendEstimateFlow(supabase, parsed.data.estimateId, { logo: await loadLogo(settings?.logo_path ?? null) });
+  if (result.ok) revalidate(parsed.data.opportunityId, parsed.data.estimateId);
+  return result;
+}
+
+export async function resendEstimateEmail(input: unknown): Promise<ActionResult<SendResult>> {
+  if (!(await currentProfileWithRole("admin", "sales"))) return NOT_ALLOWED;
+  const parsed = z.object({ estimateId: z.uuid() }).safeParse(input);
+  if (!parsed.success) return fail("invalid", "Unknown estimate");
+  return resendEstimateEmailFlow(await createClient(), parsed.data.estimateId);
+}
+
+/** A new draft version of an estimate that has been sent (`revise_estimate`). */
+export async function reviseEstimate(input: unknown): Promise<ActionResult<{ estimateId: string }>> {
+  if (!(await currentProfileWithRole("admin", "sales"))) return NOT_ALLOWED;
+  const parsed = z.object({ estimateId: z.uuid(), opportunityId: z.uuid() }).safeParse(input);
+  if (!parsed.success) return fail("invalid", "Unknown estimate");
+  const supabase = await createClient();
+  const result = unwrapRpc<RpcResult & { estimate_id: string }>(await supabase.rpc("revise_estimate", { p_estimate_id: parsed.data.estimateId }));
+  if (!result.ok) return result;
+  revalidate(parsed.data.opportunityId);
+  return ok({ estimateId: result.data.estimate_id });
 }
 
 // ---------------------------------------------------------------------------

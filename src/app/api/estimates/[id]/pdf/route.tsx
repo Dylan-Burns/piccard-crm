@@ -1,19 +1,10 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
-import { BUCKET } from "@/features/files/categories";
-import { loadEstimateDocumentData, type EstimateDocumentData } from "@/features/estimates/pdf/data";
+import { loadEstimateDocumentData } from "@/features/estimates/pdf/data";
+import { loadLogo } from "@/features/estimates/pdf/logo";
 import { EstimateDocument } from "@/features/estimates/pdf/EstimateDocument";
 import { currentProfileWithRole } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-
-/** The company logo as bytes for the PDF. WebP is skipped: the PDF renderer reads PNG and JPEG only. */
-async function loadLogo(logoPath: string | null): Promise<EstimateDocumentData["company"]["logo"]> {
-  const format = logoPath?.endsWith(".png") ? "png" : logoPath?.endsWith(".jpg") ? "jpg" : null;
-  if (!logoPath || !format) return null;
-  const { data } = await createAdminClient().storage.from(BUCKET).download(logoPath);
-  return data ? { data: Buffer.from(await data.arrayBuffer()), format } : null;
-}
 
 /** Renders the estimate PDF on demand for preview and download. Staff only; field users never see prices. */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {

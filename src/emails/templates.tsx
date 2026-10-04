@@ -104,12 +104,78 @@ export function TaskDigestEmail(p: TaskDigestProps) {
   );
 }
 
+export type EstimateProps = { customerName: string; companyName: string; companyPhone: string; label: string; title: string; validUntil: string | null; url: string; revised: boolean };
+
+/** To the customer: the estimate is ready, with the link to review and approve it. */
+export function EstimateEmail(p: EstimateProps) {
+  return (
+    <Layout preview={`Your estimate from ${p.companyName}`} title={p.revised ? "Your revised estimate is ready" : "Your estimate is ready"}>
+      <Text>Hi {p.customerName},</Text>
+      <Text>
+        {p.companyName} has prepared estimate {p.label}: {p.title}. You can review it, download a PDF, and approve it online.
+      </Text>
+      <Section style={{ margin: "16px 0" }}>
+        <Button href={p.url} style={button}>
+          Review estimate
+        </Button>
+      </Section>
+      {p.validUntil ? <Text style={muted}>This estimate is valid until {p.validUntil}.</Text> : null}
+      <Text style={muted}>Approving online confirms the estimate. A written contract follows.</Text>
+      {p.companyPhone ? <Text style={muted}>Questions? Call {p.companyPhone}.</Text> : null}
+    </Layout>
+  );
+}
+
+export type EstimateDecisionProps = { customerName: string; label: string; decision: "approved" | "declined"; reason: string; url: string };
+
+/** To the deal owner: the customer approved or declined on the public page. No amounts (rule 13 applies to email too). */
+export function EstimateDecisionEmail(p: EstimateDecisionProps) {
+  return (
+    <Layout preview={`${p.customerName} ${p.decision} estimate ${p.label}`} title={`Estimate ${p.label} ${p.decision}`}>
+      <Text>
+        {p.customerName} {p.decision} estimate {p.label}.
+      </Text>
+      {p.reason ? <Text style={muted}>Their reason: {p.reason}</Text> : null}
+      <Text style={muted}>{p.decision === "approved" ? "The deal is won and a job has been created. Get the signed contract uploaded." : "The deal is still open. Call them to see what would change their mind."}</Text>
+      <Section style={{ margin: "16px 0" }}>
+        <Button href={p.url} style={button}>
+          Open deal
+        </Button>
+      </Section>
+    </Layout>
+  );
+}
+
+export type DealWonProps = { customerName: string; dealTitle: string; jobNumber: string; owner: string; url: string };
+
+/** To admins: a deal was won and its job exists. */
+export function DealWonEmail(p: DealWonProps) {
+  return (
+    <Layout preview={`Deal won: ${p.customerName}`} title="Deal won">
+      <Text>
+        {p.customerName}: {p.dealTitle}
+      </Text>
+      <Text style={muted}>
+        Job {p.jobNumber} was created{p.owner ? `. Sold by ${p.owner}` : ""}.
+      </Text>
+      <Section style={{ margin: "16px 0" }}>
+        <Button href={p.url} style={button}>
+          Open job
+        </Button>
+      </Section>
+    </Layout>
+  );
+}
+
 /** Template registry: retries re-render an email from the props stored in email_log. */
 export const EMAIL_TEMPLATES = {
   new_lead: NewLeadEmail,
   duplicate_inquiry: DuplicateInquiryEmail,
   inspection_confirmation: InspectionConfirmationEmail,
   task_digest: TaskDigestEmail,
+  estimate: EstimateEmail,
+  estimate_decision: EstimateDecisionEmail,
+  deal_won: DealWonEmail,
 } as const;
 
 export type EmailTemplate = keyof typeof EMAIL_TEMPLATES;

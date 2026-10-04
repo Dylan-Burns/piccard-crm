@@ -2,7 +2,15 @@ import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
-  return updateSession(request);
+  const response = await updateSession(request);
+  // Customer-facing estimate pages and their endpoints are never cached or indexed (spec §7.4).
+  // Set here as well as in next.config.ts, because the framework writes its own Cache-Control for pages.
+  const { pathname } = request.nextUrl;
+  if (pathname.startsWith("/e/") || pathname.startsWith("/api/public/")) {
+    response.headers.set("Cache-Control", "no-store");
+    response.headers.set("X-Robots-Tag", "noindex");
+  }
+  return response;
 }
 
 export const config = {

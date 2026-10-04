@@ -1638,6 +1638,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_estimate: {
+        Args: { p_ip?: string; p_name: string; p_token: string }
+        Returns: Json
+      }
       assign_owner: {
         Args: { p_opportunity_id: string; p_owner_id: string }
         Returns: Json
@@ -1667,6 +1671,10 @@ export type Database = {
         Returns: Json
       }
       create_lead: { Args: { p: Json }; Returns: Json }
+      decline_estimate: {
+        Args: { p_reason?: string; p_token: string }
+        Returns: Json
+      }
       log_contact: {
         Args: {
           p_opportunity_id: string
@@ -1674,6 +1682,10 @@ export type Database = {
           p_summary?: string
           p_type: string
         }
+        Returns: Json
+      }
+      mark_estimate_sent: {
+        Args: { p_email: string; p_estimate_id: string; p_pdf_path: string }
         Returns: Json
       }
       mark_files_verified: { Args: { p_paths: string[] }; Returns: number }
@@ -1698,6 +1710,7 @@ export type Database = {
         Args: { p_lead: Json; p_submission_id: string }
         Returns: Json
       }
+      record_estimate_view: { Args: { p_token: string }; Returns: Json }
       register_files: { Args: { p: Json }; Returns: Json }
       reopen_opportunity: {
         Args: {
@@ -1715,6 +1728,8 @@ export type Database = {
         }
         Returns: Json
       }
+      revise_estimate: { Args: { p_estimate_id: string }; Returns: Json }
+      run_nightly_maintenance: { Args: never; Returns: Json }
       save_estimate_lines: {
         Args: { p_estimate_id: string; p_lines: Json }
         Returns: Json

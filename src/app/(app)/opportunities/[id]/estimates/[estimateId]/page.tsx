@@ -7,6 +7,8 @@ import { EstimateBuilder } from "@/features/estimates/components/estimate-builde
 import { EstimateStatusBadge } from "@/features/estimates/components/estimate-status-badge";
 import { estimateLabel, getEstimate, listPriceBook } from "@/features/estimates/queries";
 import { requireRole } from "@/lib/auth";
+import { appUrl } from "@/lib/env";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Estimate" };
 
@@ -20,6 +22,9 @@ export default async function EstimatePage({ params }: PageProps<"/opportunities
   if (!estimate || estimate.opportunity_id !== id) notFound();
   const editable = estimate.status === "draft";
   const priceBook = editable ? await listPriceBook({ activeOnly: true }) : [];
+  const supabase = await createClient();
+  const { data: deal } = await supabase.from("opportunities").select("customer:customers!inner(email)").eq("id", id).maybeSingle();
+  const customerEmail = deal?.customer.email?.trim() || null;
   const label = estimateLabel(estimate);
 
   return (
@@ -68,6 +73,9 @@ export default async function EstimatePage({ params }: PageProps<"/opportunities
             totalCents: estimate.total_cents,
             depositCents: estimate.deposit_cents,
           },
+          status: estimate.status,
+          customerEmail: customerEmail ?? null,
+          publicUrl: estimate.status === "sent" || estimate.status === "viewed" ? `${appUrl()}/e/${estimate.public_token}` : null,
           lines: estimate.estimate_line_items.map((l) => ({ id: l.id, name: l.name, description: l.description, quantity: Number(l.quantity), unit: l.unit, unitPriceCents: l.unit_price_cents, isTaxable: l.is_taxable })),
         }}
         priceBook={priceBook}

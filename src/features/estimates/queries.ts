@@ -8,7 +8,7 @@ export function estimateLabel(e: { estimate_number: number; version: number }) {
 }
 
 const ESTIMATE_COLUMNS = `id, opportunity_id, estimate_number, version, status, title, scope_notes, terms, subtotal_cents, discount_cents,
-  tax_rate, tax_cents, total_cents, deposit_percent, deposit_cents, valid_until, created_at, sent_at`;
+  tax_rate, tax_cents, total_cents, deposit_percent, deposit_cents, valid_until, created_at, sent_at, public_token`;
 const LINE_COLUMNS = "id, sort_order, name, description, quantity, unit, unit_price_cents, is_taxable, total_cents";
 
 /** An estimate with its lines in order. Staff only (RLS). Takes a client so tests can call it. */

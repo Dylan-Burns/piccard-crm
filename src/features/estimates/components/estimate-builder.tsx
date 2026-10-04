@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, BookOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, BookOpen, Plus, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -9,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { CopyLink } from "@/components/shared/copy-link";
 import { FieldError } from "@/components/shared/field-error";
-import { saveEstimateLines, updateEstimate, voidEstimate } from "@/features/estimates/actions";
+import { resendEstimateEmail, reviseEstimate, saveEstimateLines, sendEstimate, updateEstimate, voidEstimate } from "@/features/estimates/actions";
 import type { PriceBookItem } from "@/features/estimates/queries";
 import { computeTotals, lineTotalCents } from "@/features/estimates/totals";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
@@ -32,6 +34,10 @@ export type BuilderEstimate = {
   /** Stored totals from the database trigger: the truth once saved. */
   stored: { subtotalCents: number; discountCents: number; taxCents: number; totalCents: number; depositCents: number };
   lines: { id: string; name: string; description: string | null; quantity: number; unit: string; unitPriceCents: number; isTaxable: boolean }[];
+  /** Sending: the customer's email (null blocks it), and the customer link once it is out. */
+  customerEmail: string | null;
+  publicUrl: string | null;
+  status: "draft" | "sent" | "viewed" | "accepted" | "declined" | "expired" | "void";
 };
 
 const dollars = (cents: number) => (cents / 100).toFixed(2);
@@ -63,7 +69,9 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [bookOpen, setBookOpen] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const { editable } = estimate;
 
   const edit = <T,>(setter: (value: T) => void) => (value: T) => {
@@ -130,6 +138,32 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
       else toast.error(result.error.message);
     });
 
+  const doSend = () =>
+    startTransition(async () => {
+      const result = await sendEstimate({ estimateId: estimate.id, opportunityId: estimate.opportunityId });
+      setConfirmSend(false);
+      if (!result.ok) toast.error(result.error.message);
+      else if (result.data.email === "failed") toast.warning("Estimate sent, but the email did not go out. Resend it or copy the link.");
+      else toast.success(`Estimate sent to ${result.data.to}`);
+    });
+
+  const doResend = () =>
+    startTransition(async () => {
+      const result = await resendEstimateEmail({ estimateId: estimate.id });
+      if (!result.ok) toast.error(result.error.message);
+      else if (result.data.email === "failed") toast.error("The email did not go out. Copy the link instead.");
+      else toast.success(`Email sent to ${result.data.to}`);
+    });
+
+  const doRevise = () =>
+    startTransition(async () => {
+      const result = await reviseEstimate({ estimateId: estimate.id, opportunityId: estimate.opportunityId });
+      if (result.ok) router.push(`/opportunities/${estimate.opportunityId}/estimates/${result.data.estimateId}`);
+      else toast.error(result.error.message);
+    });
+
+  const out = estimate.status === "sent" || estimate.status === "viewed";
+  const canSend = editable && !dirty && lines.length > 0 && estimate.stored.totalCents > 0;
   const inputClass = "h-11 md:h-9";
 
   return (
@@ -274,6 +308,36 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
         {editable ? (
           <Button type="button" className="h-11 w-full md:h-9" disabled={pending || !dirty} onClick={save}>
             {dirty ? "Save estimate" : "Saved"}
+          </Button>
+        ) : null}
+        {editable ? (
+          estimate.customerEmail ? (
+            confirmSend ? (
+              <Button type="button" className="h-11 w-full md:h-9" disabled={pending || !canSend} onClick={doSend}>
+                Send to {estimate.customerEmail}
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" className="h-11 w-full md:h-9" disabled={pending || !canSend} onClick={() => setConfirmSend(true)}>
+                <Send className="size-4" aria-hidden />
+                Send to customer
+              </Button>
+            )
+          ) : (
+            <p className="text-xs text-muted-foreground">Add the customer&apos;s email to send this estimate.</p>
+          )
+        ) : null}
+        {editable && estimate.customerEmail && dirty ? <p className="text-xs text-muted-foreground">Save before sending.</p> : null}
+        {out && estimate.publicUrl ? (
+          <div className="space-y-2">
+            <CopyLink link={estimate.publicUrl} label="Customer link" />
+            <Button type="button" variant="outline" className="h-11 w-full md:h-9" disabled={pending} onClick={doResend}>
+              Resend email
+            </Button>
+          </div>
+        ) : null}
+        {["sent", "viewed", "declined", "expired", "void"].includes(estimate.status) ? (
+          <Button type="button" variant="outline" className="h-11 w-full md:h-9" disabled={pending} onClick={doRevise}>
+            Revise
           </Button>
         ) : null}
         {estimate.voidable ? (
