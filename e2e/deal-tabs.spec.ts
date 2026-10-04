@@ -104,6 +104,24 @@ test.describe("deal page tabs", () => {
     await details.getByText("Deal details", { exact: true }).click();
     await expect(details.getByRole("button", { name: "Save deal" })).toBeVisible();
 
+    // Labels and the expected close date are edited in place and survive a reload
+    const quick = page.getByRole("region", { name: "Labels and close date" });
+    await quick.getByLabel("Add a label").fill("Insurance");
+    await quick.getByLabel("Add a label").press("Enter");
+    await quick.getByLabel("Add a label").fill("Hot lead");
+    await quick.getByLabel("Add a label").press("Enter");
+    await expect(quick.getByRole("list", { name: "Labels" }).getByRole("listitem")).toHaveText(["Insurance", "Hot lead"]);
+    await quick.getByLabel("Add a label").fill("insurance"); // same label again, different case: ignored
+    await quick.getByLabel("Add a label").press("Enter");
+    await expect(quick.getByRole("list", { name: "Labels" }).getByRole("listitem")).toHaveCount(2);
+    await quick.getByLabel("Expected close").fill("2027-03-15");
+    await quick.getByRole("button", { name: "Remove label Hot lead" }).click();
+    await expect(quick.getByRole("list", { name: "Labels" }).getByRole("listitem")).toHaveText(["Insurance"]);
+    await page.waitForLoadState("networkidle");
+    await page.reload();
+    await expect(quick.getByRole("list", { name: "Labels" }).getByRole("listitem")).toHaveText(["Insurance"]);
+    await expect(quick.getByLabel("Expected close")).toHaveValue("2027-03-15");
+
     // Logging a call updates the overview
     await page.getByRole("tab", { name: "Call" }).click();
     await page.getByRole("tabpanel", { name: "Call" }).getByRole("button", { name: "Save" }).click();

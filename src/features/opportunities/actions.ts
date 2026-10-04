@@ -72,3 +72,29 @@ export async function keepBothDeals(_prev: ActionResult | null, formData: FormDa
   revalidatePath(`/opportunities/${id.data}`);
   return ok();
 }
+
+const dealMetaSchema = z.object({
+  id: z.uuid(),
+  labels: z
+    .array(z.string().trim().min(1).max(30))
+    .max(10)
+    .refine((l) => new Set(l.map((x) => x.toLowerCase())).size === l.length, "Labels must be different")
+    .optional(),
+  expectedCloseOn: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.null()]).optional(),
+});
+
+/** Labels and expected close date, saved from the deal's summary. One write. */
+export async function updateDealMeta(input: unknown): Promise<ActionResult> {
+  if (!(await currentProfileWithRole("admin", "sales"))) return NOT_ALLOWED;
+  const parsed = dealMetaSchema.safeParse(input);
+  if (!parsed.success) return fail("invalid", "Labels can be up to 30 characters, 10 per deal");
+  const { id, labels, expectedCloseOn } = parsed.data;
+  const values = { ...(labels ? { labels } : {}), ...(expectedCloseOn !== undefined ? { expected_close_on: expectedCloseOn } : {}) };
+  if (Object.keys(values).length === 0) return ok();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("opportunities").update(values).eq("id", id).select("id");
+  if (error || data.length === 0) return fail("update_failed", "Could not save the deal");
+  revalidatePath(`/opportunities/${id}`);
+  revalidatePath("/pipeline");
+  return ok();
+}

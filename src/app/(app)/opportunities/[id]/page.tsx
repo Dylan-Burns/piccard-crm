@@ -22,11 +22,12 @@ import { LogContactDialog, LogContactForm } from "@/features/leads/components/lo
 import { OwnerSelect } from "@/features/leads/components/owner-select";
 import { listLeadSources } from "@/features/leads/queries";
 import { DealEditForm } from "@/features/opportunities/components/deal-edit-form";
+import { DealQuickFields } from "@/features/opportunities/components/deal-quick-fields";
 import { DealStageControls } from "@/features/opportunities/components/deal-stage-controls";
 import { DealWorkspace, type HistoryItem } from "@/features/opportunities/components/deal-workspace";
 import { DuplicateBanner } from "@/features/opportunities/components/duplicate-banner";
 import { historyKind } from "@/features/opportunities/history";
-import { getOpportunityDetail } from "@/features/opportunities/queries";
+import { getOpportunityDetail, listDealLabels } from "@/features/opportunities/queries";
 import { estimateLabel, summarizeDeal } from "@/features/opportunities/summary";
 import { requireRole } from "@/lib/auth";
 import { age, dueState, formatDateTime, relativeTime, tomorrowAtNine } from "@/lib/dates";
@@ -52,10 +53,11 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   ]);
   if (!detail) notFound();
   const { deal, activities, notes, tasks, duplicateOf } = detail;
-  const [appointments, files, invoices] = await Promise.all([
+  const [appointments, files, invoices, labelSuggestions] = await Promise.all([
     listAppointments(null, null, timeZone, { opportunityId: deal.id, includeClosed: true }),
     listFiles(me, { opportunityId: deal.id }),
     deal.jobs ? listJobInvoices(deal.jobs.id) : Promise.resolve([]),
+    listDealLabels(),
   ]);
   const { today } = todayRange(timeZone);
 
@@ -117,7 +119,10 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
         {/* Sidebar: what the deal is. On phones it follows the working area. */}
         <div className="order-2 md:order-1">
           <DealSummaryCard deal={summarizeDeal(deal, address, timeZone)} />
-          <div className="mt-3">
+          <section aria-label="Labels and close date" className="mt-3 border-b pb-3">
+            <DealQuickFields dealId={deal.id} labels={deal.labels} expectedCloseOn={deal.expected_close_on} suggestions={labelSuggestions} editable />
+          </section>
+          <div className="mt-1">
             <CollapsibleSection title="Customer">
               <p>
                 <Link href={`/customers/${deal.customer_id}`} className="font-medium text-primary hover:underline">

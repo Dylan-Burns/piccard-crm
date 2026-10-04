@@ -8,7 +8,7 @@ export async function getOpportunityDetail(id: string) {
       .from("opportunities")
       .select(
         `id, title, stage, work_type, description, estimated_value_cents, amount_cents, lost_reason, lost_notes, lost_competitor,
-         owner_id, source_id, source_detail, property_id, customer_id, created_at, stage_entered_at, possible_duplicate_of,
+         owner_id, source_id, source_detail, property_id, customer_id, created_at, stage_entered_at, possible_duplicate_of, labels, expected_close_on,
          is_insurance_claim, insurance_carrier, claim_number, adjuster_name, adjuster_phone, deductible_cents,
          customer:customers!inner(id, first_name, last_name, company_name, preferred_contact, phone, phone_e164, email,
            properties(id, label, address_line1, city, state, postal_code, access_notes, is_primary)),
@@ -46,3 +46,10 @@ export async function getOpportunityDetail(id: string) {
 }
 
 export type OpportunityDetail = NonNullable<Awaited<ReturnType<typeof getOpportunityDetail>>>;
+
+/** Labels already used on any deal, for suggestions when adding one. */
+export async function listDealLabels(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("opportunities").select("labels").not("labels", "eq", "{}").limit(500);
+  return [...new Set((data ?? []).flatMap((d) => d.labels))].sort((a, b) => a.localeCompare(b));
+}

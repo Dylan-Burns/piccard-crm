@@ -1145,6 +1145,7 @@ export type Database = {
           deductible_cents: number | null
           description: string | null
           estimated_value_cents: number | null
+          expected_close_on: string | null
           first_contact_attempted_at: string | null
           first_contact_attempted_by: string | null
           first_contacted_at: string | null
@@ -1152,6 +1153,7 @@ export type Database = {
           id: string
           insurance_carrier: string | null
           is_insurance_claim: boolean
+          labels: string[]
           lost_at: string | null
           lost_competitor: string | null
           lost_notes: string | null
@@ -1184,6 +1186,7 @@ export type Database = {
           deductible_cents?: number | null
           description?: string | null
           estimated_value_cents?: number | null
+          expected_close_on?: string | null
           first_contact_attempted_at?: string | null
           first_contact_attempted_by?: string | null
           first_contacted_at?: string | null
@@ -1191,6 +1194,7 @@ export type Database = {
           id?: string
           insurance_carrier?: string | null
           is_insurance_claim?: boolean
+          labels?: string[]
           lost_at?: string | null
           lost_competitor?: string | null
           lost_notes?: string | null
@@ -1223,6 +1227,7 @@ export type Database = {
           deductible_cents?: number | null
           description?: string | null
           estimated_value_cents?: number | null
+          expected_close_on?: string | null
           first_contact_attempted_at?: string | null
           first_contact_attempted_by?: string | null
           first_contacted_at?: string | null
@@ -1230,6 +1235,7 @@ export type Database = {
           id?: string
           insurance_carrier?: string | null
           is_insurance_claim?: boolean
+          labels?: string[]
           lost_at?: string | null
           lost_competitor?: string | null
           lost_notes?: string | null
