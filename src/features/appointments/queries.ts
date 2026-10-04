@@ -42,6 +42,9 @@ export type CalendarItem = {
   outcomeNotes: string | null;
   opportunityId: string;
   jobId: string | null;
+  /** Google Calendar state; `not_synced` when Google is not connected. */
+  sync: Enums["sync_status"];
+  syncError: string | null;
 };
 
 export type AppointmentFilters = { assignee?: string; type?: string; opportunityId?: string; includeClosed?: boolean };
@@ -52,7 +55,7 @@ export async function listAppointments(fromDay: string | null, toDayExclusive: s
   let query = supabase
     .from("appointments")
     .select(
-      `id, title, type, status, starts_at, ends_at, all_day, notes, outcome_notes, opportunity_id, job_id, assigned_to,
+      `id, title, type, status, starts_at, ends_at, all_day, notes, outcome_notes, opportunity_id, job_id, assigned_to, google_sync_status, google_sync_error,
        customer:customers!inner(first_name, last_name, phone, phone_e164),
        property:properties(address_line1, city, state, postal_code, access_notes),
        assignee:profiles!appointments_assigned_to_fkey(full_name)`,
@@ -93,6 +96,8 @@ export async function listAppointments(fromDay: string | null, toDayExclusive: s
       outcomeNotes: a.outcome_notes,
       opportunityId: a.opportunity_id,
       jobId: a.job_id,
+      sync: a.google_sync_status,
+      syncError: a.google_sync_error,
     };
   });
 }

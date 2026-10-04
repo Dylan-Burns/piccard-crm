@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { scheduleJobSchema, setJobStatusSchema, updateJobSchema } from "@/features/jobs/schemas";
 import { currentProfileWithRole } from "@/lib/auth";
+import { processOutbox } from "@/lib/integrations/outbox";
 import { fail, fieldErrors, ok, type ActionResult } from "@/lib/result";
 import { unwrapRpc, type RpcResult } from "@/lib/rpc";
 import { createClient } from "@/lib/supabase/server";
@@ -11,6 +13,8 @@ import { createClient } from "@/lib/supabase/server";
 const NOT_ALLOWED = fail("forbidden", "You do not have permission to do that");
 
 function revalidate(jobId: string) {
+  // Scheduling or cancelling a job changes work-day appointments; send the queued calendar changes now.
+  after(() => processOutbox());
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/today");

@@ -1658,6 +1658,28 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_outbox_batch: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempts: number
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          last_error: string | null
+          locked_at: string | null
+          next_attempt_at: string
+          processed_at: string | null
+          provider: Database["public"]["Enums"]["integration_provider"]
+          status: Database["public"]["Enums"]["outbox_status"]
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "sync_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       complete_appointment: {
         Args: {
           p_appointment_id: string
@@ -1666,6 +1688,7 @@ export type Database = {
         }
         Returns: Json
       }
+      complete_outbox: { Args: { p_id: string }; Returns: undefined }
       create_estimate: {
         Args: { p_opportunity_id: string; p_title?: string }
         Returns: Json
@@ -1674,6 +1697,20 @@ export type Database = {
       decline_estimate: {
         Args: { p_reason?: string; p_token: string }
         Returns: Json
+      }
+      enqueue_appointment_syncs: {
+        Args: { p_days?: number; p_ids?: string[] }
+        Returns: number
+      }
+      fail_outbox: {
+        Args: { p_error: string; p_hold?: boolean; p_id: string }
+        Returns: string
+      }
+      lock_integration: {
+        Args: {
+          p_provider: Database["public"]["Enums"]["integration_provider"]
+        }
+        Returns: boolean
       }
       log_contact: {
         Args: {
@@ -1825,6 +1862,12 @@ export type Database = {
           p_task_id: string
         }
         Returns: Json
+      }
+      unlock_integration: {
+        Args: {
+          p_provider: Database["public"]["Enums"]["integration_provider"]
+        }
+        Returns: undefined
       }
       void_estimate: { Args: { p_estimate_id: string }; Returns: Json }
     }

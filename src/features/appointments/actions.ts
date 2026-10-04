@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import { z } from "zod";
 import { currentProfileWithRole } from "@/lib/auth";
+import { processOutbox } from "@/lib/integrations/outbox";
 import { sendEmail } from "@/lib/integrations/resend";
 import { formatPhone } from "@/lib/phone";
 import { fail, fieldErrors, ok, type ActionResult } from "@/lib/result";
@@ -18,6 +19,8 @@ const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date");
 const time = z.string().regex(/^\d{2}:\d{2}$/, "Choose a time");
 
 function revalidate(opportunityId?: string | null) {
+  // Calendar changes were queued by the database; send them now rather than waiting for cron.
+  after(() => processOutbox());
   revalidatePath("/calendar");
   revalidatePath("/today");
   revalidatePath("/pipeline");

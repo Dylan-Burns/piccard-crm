@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { CopyLink } from "@/components/shared/copy-link";
+import { GoogleCalendarControls, RetrySyncButton } from "@/features/settings/components/google-calendar-controls";
 import { LeadIngestionControls, RetrySubmissionButton } from "@/features/settings/components/lead-ingestion-controls";
 import { requireRole } from "@/lib/auth";
-import { relativeTime } from "@/lib/dates";
+import { formatDateTime, relativeTime } from "@/lib/dates";
 import { appUrl, serverEnv } from "@/lib/env";
+import { getTimeZone } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
@@ -25,8 +27,18 @@ const STATUS_LABEL: Record<string, string> = {
   error: "Error",
 };
 
-export default async function IntegrationsPage() {
+const GOOGLE_NOTICE: Record<string, { tone: "ok" | "bad"; text: string }> = {
+  connected: { tone: "ok", text: "Google Calendar is connected. Upcoming appointments are being added now." },
+  cancelled: { tone: "bad", text: "Google sign-in was cancelled. Nothing changed." },
+  error: { tone: "bad", text: "Google sign-in did not finish. Try again." },
+  no_refresh_token: { tone: "bad", text: "Google did not grant ongoing access. Remove this app under your Google account's third-party access, then connect again." },
+  not_configured: { tone: "bad", text: "Google is not set up yet: add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and INTEGRATION_ENCRYPTION_KEY in the Vercel project settings." },
+};
+
+export default async function IntegrationsPage({ searchParams }: PageProps<"/settings/integrations">) {
   await requireRole("admin");
+  const params = await searchParams;
+  const googleNotice = typeof params.google === "string" ? GOOGLE_NOTICE[params.google] : undefined;
   const supabase = await createClient();
   const env = serverEnv();
   const base = appUrl();
@@ -36,6 +48,18 @@ export default async function IntegrationsPage() {
     createAdminClient().from("email_log").select("status", { count: "exact", head: true }).eq("status", "failed"),
   ]);
 
+  // Connection status and sync issues are service-role data, shown on this admin-gated screen (CLAUDE.md rule 4).
+  const admin = createAdminClient();
+  const [{ data: google }, { data: syncIssues }, { count: pendingSyncs }] = await Promise.all([
+    admin.from("integration_connections").select("status, external_account_id, config, last_error, updated_at").eq("provider", "google_calendar").maybeSingle(),
+    admin.from("appointments").select("id, title, starts_at, google_sync_error, opportunity_id").eq("google_sync_status", "error").order("starts_at").limit(50),
+    admin.from("sync_outbox").select("id", { count: "exact", head: true }).eq("provider", "google_calendar").eq("status", "pending"),
+  ]);
+  const googleReady = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.INTEGRATION_ENCRYPTION_KEY);
+  const googleConnected = google?.status === "connected" || google?.status === "error";
+  const calendarName = (google?.config as { calendar_name?: string } | null)?.calendar_name;
+  const timeZone = await getTimeZone();
+
   const configured = {
     website: Boolean(env.LEAD_WEBHOOK_SECRET),
     googleAds: Boolean(env.GOOGLE_ADS_WEBHOOK_KEY),
@@ -44,6 +68,72 @@ export default async function IntegrationsPage() {
 
   return (
     <div className="max-w-3xl space-y-8">
+      <section aria-label="Google Calendar" className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Google Calendar</h2>
+          <p className="text-muted-foreground">
+            Every appointment is copied to a shared calendar, and whoever is assigned gets it on their own Google calendar. It is one way: changes made in Google are overwritten.
+          </p>
+        </div>
+        {googleNotice ? (
+          <p role="status" className={cn("rounded-md border p-3", googleNotice.tone === "ok" ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive")}>
+            {googleNotice.text}
+          </p>
+        ) : null}
+        <div className="space-y-3 rounded-md border bg-card p-3">
+          <h3 className="flex items-center gap-2 font-medium">
+            Connection
+            <span className={cn("rounded px-1.5 text-xs font-medium", google?.status === "connected" ? "bg-success/10 text-success" : google?.status === "error" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
+              {google?.status === "connected" ? "Connected" : google?.status === "error" ? "Needs reconnecting" : "Not connected"}
+            </span>
+          </h3>
+          {googleConnected ? (
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+              <dt className="text-muted-foreground">Account</dt>
+              <dd className="truncate">{google?.external_account_id ?? "Unknown"}</dd>
+              <dt className="text-muted-foreground">Calendar</dt>
+              <dd className="truncate">{calendarName ?? "CRM calendar"}</dd>
+              <dt className="text-muted-foreground">Waiting to sync</dt>
+              <dd className="tabular">{pendingSyncs ?? 0}</dd>
+            </dl>
+          ) : null}
+          {google?.status === "error" && google.last_error ? <p className="text-destructive">{google.last_error}</p> : null}
+          {googleReady ? (
+            <GoogleCalendarControls connected={googleConnected} />
+          ) : (
+            <p className="text-muted-foreground">
+              Not set up yet: create a Google Cloud OAuth client and add <code className="rounded bg-muted px-1">GOOGLE_CLIENT_ID</code>, <code className="rounded bg-muted px-1">GOOGLE_CLIENT_SECRET</code>, and{" "}
+              <code className="rounded bg-muted px-1">INTEGRATION_ENCRYPTION_KEY</code> in the Vercel project settings. Register this redirect address on the OAuth client:
+            </p>
+          )}
+          {googleReady ? null : <CopyLink link={`${base}/api/integrations/google/callback`} label="Google redirect URI" />}
+          <p className="text-xs text-muted-foreground">
+            The OAuth consent screen must be <strong>Internal</strong> (Google Workspace) or published <strong>In production</strong>. An app left in &quot;Testing&quot; is signed out by Google every 7 days.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="font-medium">Sync issues</h3>
+          {!syncIssues?.length ? (
+            <p className="text-muted-foreground">No appointments have failed to sync.</p>
+          ) : (
+            <ul className="divide-y rounded-md border bg-card">
+              {syncIssues.map((issue) => (
+                <li key={issue.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{issue.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {formatDateTime(issue.starts_at, timeZone)} · {issue.google_sync_error ?? "Unknown error"}
+                    </p>
+                  </div>
+                  <RetrySyncButton appointmentId={issue.id} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
       <section className="space-y-4">
         <div>
           <h2 className="text-base font-semibold">Automatic lead capture</h2>

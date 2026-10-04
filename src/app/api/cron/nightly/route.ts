@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { retryLeadSubmissions } from "@/features/leads/ingest";
 import { isAuthorizedCron } from "@/lib/cron";
+import { enqueueAppointments } from "@/lib/integrations/google-calendar";
+import { processOutbox } from "@/lib/integrations/outbox";
 import { retryEmails } from "@/lib/integrations/resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Nightly: expire estimates past their valid-until date, give every open deal with no next step
- * a task (spec §4.4), then retry stuck lead submissions and unsent emails. Safe to run by hand
+ * a task (spec §4.4), retry stuck lead submissions and unsent emails, and re-assert the next 60
+ * days of appointments on Google Calendar (which restores events deleted there). Safe to run by hand
  * or twice: `curl -H "Authorization: Bearer $CRON_SECRET" <app>/api/cron/nightly`.
  */
 export async function GET(request: Request) {
@@ -14,5 +17,9 @@ export async function GET(request: Request) {
   const { data, error } = await createAdminClient().rpc("run_nightly_maintenance");
   const leads = await retryLeadSubmissions();
   const emails = await retryEmails();
-  return NextResponse.json({ ok: !error, maintenance: error ? { error: error.message } : data, leads, emails }, { status: error ? 500 : 200 });
+  // Only when Google is connected; otherwise there is nothing to keep in step.
+  const db = createAdminClient();
+  const { data: google } = await db.from("integration_connections").select("status").eq("provider", "google_calendar").maybeSingle();
+  const calendar = google?.status === "connected" ? { queued: await enqueueAppointments(60).catch(() => 0), ...(await processOutbox(fetch, 100)) } : null;
+  return NextResponse.json({ ok: !error, maintenance: error ? { error: error.message } : data, leads, emails, calendar }, { status: error ? 500 : 200 });
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { MapPin, Phone } from "lucide-react";
+import { CalendarCheck2, CalendarX2, MapPin, Phone, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -264,9 +264,22 @@ export function AppointmentRow({ item, permissions, users, showDay }: { item: Ca
             <span className={cn("block truncate font-medium", item.status !== "scheduled" && "text-muted-foreground")}>{item.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{[item.address, item.assignee].filter(Boolean).join(" · ")}</span>
           </span>
+          <SyncIcon sync={item.sync} error={item.syncError} />
           {item.status !== "scheduled" ? <span className="shrink-0 text-xs text-muted-foreground">{STATUS_LABEL[item.status]}</span> : null}
         </button>
       }
     />
+  );
+}
+
+/** Google Calendar state for an appointment: on the calendar, waiting, or failed. Nothing when Google is not connected. */
+function SyncIcon({ sync, error }: { sync: CalendarItem["sync"]; error: string | null }) {
+  if (sync === "not_synced") return null;
+  const label = sync === "synced" ? "On Google Calendar" : sync === "pending" ? "Waiting to sync to Google Calendar" : `Google Calendar sync failed${error ? `: ${error}` : ""}`;
+  const Icon = sync === "synced" ? CalendarCheck2 : sync === "pending" ? RefreshCw : CalendarX2;
+  return (
+    <span role="img" aria-label={label} title={label} className={cn("shrink-0", sync === "error" ? "text-destructive" : "text-muted-foreground")}>
+      <Icon className="size-4" aria-hidden />
+    </span>
   );
 }
