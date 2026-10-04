@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { retryLeadSubmissions } from "@/features/leads/ingest";
 import { isAuthorizedCron } from "@/lib/cron";
 import { enqueueAppointments } from "@/lib/integrations/google-calendar";
+import { syncAllAccounts } from "@/lib/integrations/email/mailbox";
 import { processOutbox } from "@/lib/integrations/outbox";
 import { retryEmails } from "@/lib/integrations/resend";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,5 +22,6 @@ export async function GET(request: Request) {
   const db = createAdminClient();
   const { data: google } = await db.from("integration_connections").select("status").eq("provider", "google_calendar").maybeSingle();
   const calendar = google?.status === "connected" ? { queued: await enqueueAppointments(60).catch(() => 0), ...(await processOutbox(fetch, 100)) } : null;
-  return NextResponse.json({ ok: !error, maintenance: error ? { error: error.message } : data, leads, emails, calendar }, { status: error ? 500 : 200 });
+  const mailboxes = await syncAllAccounts();
+  return NextResponse.json({ ok: !error, maintenance: error ? { error: error.message } : data, leads, emails, calendar, mailboxes }, { status: error ? 500 : 200 });
 }

@@ -28,11 +28,12 @@ export function GoogleCalendarControls({ connected }: { connected: boolean }) {
           </form>
           <form action={disconnect}>
             {confirming ? (
-              <Button type="submit" variant="destructive" className="h-11 md:h-9" disabled={disconnecting}>
+              <Button key="confirm" type="submit" variant="destructive" className="h-11 md:h-9" disabled={disconnecting}>
                 Confirm disconnect
               </Button>
             ) : (
-              <Button type="button" variant="ghost" className="h-11 text-red-600 md:h-9" onClick={() => setConfirming(true)}>
+              // A distinct key, so the first click cannot submit the form (see mailbox-card.tsx).
+              <Button key="ask" type="button" variant="ghost" className="h-11 text-red-600 md:h-9" onClick={() => setConfirming(true)}>
                 Disconnect
               </Button>
             )}

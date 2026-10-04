@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CopyLink } from "@/components/shared/copy-link";
+import { emailProviderReady } from "@/features/email/providers";
 import { GoogleCalendarControls, RetrySyncButton } from "@/features/settings/components/google-calendar-controls";
 import { LeadIngestionControls, RetrySubmissionButton } from "@/features/settings/components/lead-ingestion-controls";
 import { requireRole } from "@/lib/auth";
@@ -55,6 +56,8 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/set
     admin.from("appointments").select("id, title, starts_at, google_sync_error, opportunity_id").eq("google_sync_status", "error").order("starts_at").limit(50),
     admin.from("sync_outbox").select("id", { count: "exact", head: true }).eq("provider", "google_calendar").eq("status", "pending"),
   ]);
+  const emailReady = { google: emailProviderReady("google"), microsoft: emailProviderReady("microsoft") };
+  const { count: linkedMailboxes } = await admin.from("email_accounts").select("id", { count: "exact", head: true }).eq("status", "connected");
   const googleReady = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.INTEGRATION_ENCRYPTION_KEY);
   const googleConnected = google?.status === "connected" || google?.status === "error";
   const calendarName = (google?.config as { calendar_name?: string } | null)?.calendar_name;
@@ -132,6 +135,41 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/set
             </ul>
           )}
         </div>
+      </section>
+
+      <section aria-label="Email accounts" className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Email accounts</h2>
+          <p className="text-muted-foreground">
+            Each admin and sales user links their own mailbox under Settings → Profile. Email to and from customers then appears on their deals, and email can be sent from a deal. This section is the one-time
+            company setup.
+          </p>
+        </div>
+        <div className="space-y-3 rounded-md border bg-card p-3">
+          <h3 className="flex items-center gap-2 font-medium">
+            Google Workspace <Configured ok={emailReady.google} />
+          </h3>
+          <p className="text-muted-foreground">
+            Uses the same Google Cloud OAuth client as the calendar (<code className="rounded bg-muted px-1">GOOGLE_CLIENT_ID</code>, <code className="rounded bg-muted px-1">GOOGLE_CLIENT_SECRET</code>). Enable the Gmail API, add the
+            scopes <code className="rounded bg-muted px-1">gmail.readonly</code> and <code className="rounded bg-muted px-1">gmail.send</code>, keep the consent screen <strong>Internal</strong>, and register this redirect address:
+          </p>
+          <CopyLink link={`${base}/api/integrations/email/google/callback`} label="Google email redirect URI" />
+        </div>
+        <div className="space-y-3 rounded-md border bg-card p-3">
+          <h3 className="flex items-center gap-2 font-medium">
+            Microsoft 365 <Configured ok={emailReady.microsoft} />
+          </h3>
+          <p className="text-muted-foreground">
+            Create an app registration in Microsoft Entra with delegated permissions <code className="rounded bg-muted px-1">Mail.Read</code>, <code className="rounded bg-muted px-1">Mail.Send</code>,{" "}
+            <code className="rounded bg-muted px-1">User.Read</code> and <code className="rounded bg-muted px-1">offline_access</code>, then add <code className="rounded bg-muted px-1">MICROSOFT_CLIENT_ID</code>,{" "}
+            <code className="rounded bg-muted px-1">MICROSOFT_CLIENT_SECRET</code> and (to limit sign-in to your organisation) <code className="rounded bg-muted px-1">MICROSOFT_TENANT_ID</code> in the Vercel project settings. Register this
+            redirect address (type Web):
+          </p>
+          <CopyLink link={`${base}/api/integrations/email/microsoft/callback`} label="Microsoft email redirect URI" />
+        </div>
+        <p className="text-muted-foreground">
+          {linkedMailboxes ?? 0} mailbox{linkedMailboxes === 1 ? "" : "es"} linked. Both providers also need <code className="rounded bg-muted px-1">INTEGRATION_ENCRYPTION_KEY</code>.
+        </p>
       </section>
 
       <section className="space-y-4">

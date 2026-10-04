@@ -365,6 +365,62 @@ export type Database = {
           },
         ]
       }
+      email_accounts: {
+        Row: {
+          access_token_enc: string | null
+          created_at: string
+          email_address: string
+          expires_at: string | null
+          id: string
+          last_error: string | null
+          last_synced_at: string | null
+          provider: Database["public"]["Enums"]["email_provider"]
+          refresh_token_enc: string | null
+          status: string
+          synced_through: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token_enc?: string | null
+          created_at?: string
+          email_address: string
+          expires_at?: string | null
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          provider: Database["public"]["Enums"]["email_provider"]
+          refresh_token_enc?: string | null
+          status?: string
+          synced_through?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token_enc?: string | null
+          created_at?: string
+          email_address?: string
+          expires_at?: string | null
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          provider?: Database["public"]["Enums"]["email_provider"]
+          refresh_token_enc?: string | null
+          status?: string
+          synced_through?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_log: {
         Row: {
           attempts: number
@@ -417,6 +473,94 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "email_log_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_messages: {
+        Row: {
+          account_id: string | null
+          body_text: string
+          cc_addresses: string[]
+          created_at: string
+          customer_id: string
+          direction: Database["public"]["Enums"]["email_direction"]
+          from_address: string
+          from_name: string | null
+          has_attachments: boolean
+          id: string
+          internet_message_id: string
+          opportunity_id: string | null
+          provider: Database["public"]["Enums"]["email_provider"]
+          provider_message_id: string
+          sent_at: string
+          snippet: string
+          subject: string
+          thread_id: string | null
+          to_addresses: string[]
+        }
+        Insert: {
+          account_id?: string | null
+          body_text?: string
+          cc_addresses?: string[]
+          created_at?: string
+          customer_id: string
+          direction: Database["public"]["Enums"]["email_direction"]
+          from_address: string
+          from_name?: string | null
+          has_attachments?: boolean
+          id?: string
+          internet_message_id: string
+          opportunity_id?: string | null
+          provider: Database["public"]["Enums"]["email_provider"]
+          provider_message_id: string
+          sent_at: string
+          snippet?: string
+          subject?: string
+          thread_id?: string | null
+          to_addresses?: string[]
+        }
+        Update: {
+          account_id?: string | null
+          body_text?: string
+          cc_addresses?: string[]
+          created_at?: string
+          customer_id?: string
+          direction?: Database["public"]["Enums"]["email_direction"]
+          from_address?: string
+          from_name?: string | null
+          has_attachments?: boolean
+          id?: string
+          internet_message_id?: string
+          opportunity_id?: string | null
+          provider?: Database["public"]["Enums"]["email_provider"]
+          provider_message_id?: string
+          sent_at?: string
+          snippet?: string
+          subject?: string
+          thread_id?: string | null
+          to_addresses?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_opportunity_id_fkey"
             columns: ["opportunity_id"]
             isOneToOne: false
             referencedRelation: "opportunities"
@@ -1698,6 +1842,7 @@ export type Database = {
         Args: { p_reason?: string; p_token: string }
         Returns: Json
       }
+      disconnect_email_account: { Args: never; Returns: Json }
       enqueue_appointment_syncs: {
         Args: { p_days?: number; p_ids?: string[] }
         Returns: number
@@ -1720,6 +1865,10 @@ export type Database = {
           p_type: string
         }
         Returns: Json
+      }
+      mailbox_customer_addresses: {
+        Args: { p_account_id: string; p_customer_email?: string }
+        Returns: string[]
       }
       mark_estimate_sent: {
         Args: { p_email: string; p_estimate_id: string; p_pdf_path: string }
@@ -1747,6 +1896,7 @@ export type Database = {
         Args: { p_lead: Json; p_submission_id: string }
         Returns: Json
       }
+      record_email_message: { Args: { p: Json }; Returns: Json }
       record_estimate_view: { Args: { p_token: string }; Returns: Json }
       register_files: { Args: { p: Json }; Returns: Json }
       reopen_opportunity: {
@@ -1834,6 +1984,16 @@ export type Database = {
       }
       revise_estimate: { Args: { p_estimate_id: string }; Returns: Json }
       run_nightly_maintenance: { Args: never; Returns: Json }
+      save_email_account: {
+        Args: {
+          p_access_token_enc: string
+          p_email: string
+          p_expires_at: string
+          p_provider: Database["public"]["Enums"]["email_provider"]
+          p_refresh_token_enc: string
+        }
+        Returns: Json
+      }
       save_estimate_lines: {
         Args: { p_estimate_id: string; p_lines: Json }
         Returns: Json
@@ -1908,6 +2068,8 @@ export type Database = {
         | "estimate_presentation"
         | "job_work"
         | "other"
+      email_direction: "inbound" | "outbound"
+      email_provider: "google" | "microsoft"
       email_status: "pending" | "sent" | "failed"
       estimate_status:
         | "draft"
@@ -2146,6 +2308,8 @@ export const Constants = {
         "job_work",
         "other",
       ],
+      email_direction: ["inbound", "outbound"],
+      email_provider: ["google", "microsoft"],
       email_status: ["pending", "sent", "failed"],
       estimate_status: [
         "draft",

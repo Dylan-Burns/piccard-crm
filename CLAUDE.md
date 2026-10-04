@@ -24,7 +24,7 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 1. **Do not change the schema, RLS policies, or lifecycle rules** defined in `docs/spec.md` §2–§4. If they cannot be implemented as written, stop and ask.
 2. **Migrations are append-only.** New numbered file in `supabase/migrations/`; never edit an applied migration.
 3. **The database is the authorization layer.** Every table has RLS enabled (which rows), column-level grants (which columns, spec §2.10), and lifecycle columns are writable only through RPCs. Use the user-scoped client (`lib/supabase/server.ts`) for all user-initiated reads and writes. A direct write that hits `permission denied` means you need the RPC, not a broader grant.
-4. **The service-role client (`lib/supabase/admin.ts`) is allowed only in:** webhook routes, cron routes, integration workers, the public estimate page and its actions, storage URL signing, user administration (invite, deactivate), and admin-gated integration settings (connection status, disconnect, retry). It imports `server-only`.
+4. **The service-role client (`lib/supabase/admin.ts`) is allowed only in:** webhook routes, cron routes, integration workers, the public estimate page and its actions, storage URL signing, user administration (invite, deactivate), admin-gated integration settings (connection status, disconnect, retry), and linked-mailbox sync and sending (they need the encrypted tokens). It imports `server-only`.
 5. **Multi-step writes are Postgres RPCs**, never several sequential supabase-js calls. A server action validates with zod, calls one RPC (or one simple write), revalidates, and returns `ActionResult<T>`.
 6. **RPCs return `{ok:false, code, …}` for business-rule failures** and raise only for authorization failures. Function rules (spec §2.1): helpers and triggers in schema `private`, callable RPCs in `public`; every function has `set search_path = ''` and schema-qualifies every name; every `security definer` RPC begins with an authorization guard; execute is default-denied, so each RPC is followed by an explicit `grant execute … to authenticated` (or `service_role`).
 7. **Money is integer cents** in columns ending `_cents`. Format only at the edge with `lib/money.ts`. Never use floats for money.
@@ -52,6 +52,7 @@ Decisions made where the spec was silent are logged, one line each, in `docs/dec
 - `invoices` (per job; deposit | final only; amounts generated from the accepted estimate, never hand-edited; QuickBooks sync columns) 1─N `invoice_line_items`
 - `notes`, `files`, `activities` (append-only), `tasks` — each with customer_id / opportunity_id / job_id
 - `integration_connections`, `sync_outbox`, `email_log` (pending / sent / failed) — service role only
+- `email_accounts` (one linked Google or Microsoft mailbox per staff user; tokens never readable through the API), `email_messages` (customer email only; staff read, written only by `record_email_message`). Added after the spec with the owner's approval; see `docs/decisions.md`.
 
 Stages: new → contacted → qualified → inspection_scheduled → estimate_sent → negotiation → won | lost.
 

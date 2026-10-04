@@ -88,11 +88,12 @@ function ItemRow({ item }: { item: PriceBookItem }) {
                 Cancel
               </Button>
               {confirmDelete ? (
-                <Button type="submit" name="intent" value="delete" variant="destructive" className="ml-auto h-11 md:h-9" disabled={pending} formNoValidate>
+                <Button key="confirm" type="submit" name="intent" value="delete" variant="destructive" className="ml-auto h-11 md:h-9" disabled={pending} formNoValidate>
                   Delete permanently
                 </Button>
               ) : (
-                <Button type="button" variant="ghost" className="ml-auto h-11 text-red-600 md:h-9" onClick={() => setConfirmDelete(true)}>
+                // A distinct key, so the first click cannot submit the form (see mailbox-card.tsx).
+                <Button key="ask" type="button" variant="ghost" className="ml-auto h-11 text-red-600 md:h-9" onClick={() => setConfirmDelete(true)}>
                   Delete
                 </Button>
               )}

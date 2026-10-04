@@ -12,6 +12,8 @@ import type { TimelineItem } from "@/components/shared/timeline";
 import { AppointmentRow } from "@/features/appointments/components/appointment-dialog";
 import { ScheduleAppointmentDialog } from "@/features/appointments/components/schedule-appointment-dialog";
 import { listAppointments, todayRange } from "@/features/appointments/queries";
+import { DealEmailPanel } from "@/features/email/components/deal-email-panel";
+import { getMyMailbox, listDealEmails } from "@/features/email/queries";
 import { EstimatesPanel } from "@/features/estimates/components/estimates-panel";
 import { CATEGORY_ORDER } from "@/features/files/categories";
 import { FileGrid } from "@/features/files/components/file-grid";
@@ -54,11 +56,13 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   ]);
   if (!detail) notFound();
   const { deal, activities, notes, tasks, duplicateOf } = detail;
-  const [appointments, files, invoices, labelSuggestions] = await Promise.all([
+  const [appointments, files, invoices, labelSuggestions, mailbox, emails] = await Promise.all([
     listAppointments(null, null, timeZone, { opportunityId: deal.id, includeClosed: true }),
     listFiles(me, { opportunityId: deal.id }),
     deal.jobs ? listJobInvoices(deal.jobs.id) : Promise.resolve([]),
     listDealLabels(),
+    getMyMailbox(me.id),
+    listDealEmails(deal.id, timeZone),
   ]);
   const { today } = todayRange(timeZone);
 
@@ -298,7 +302,17 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
                 </section>
               ),
               call: open ? <LogContactForm opportunityId={deal.id} customerId={deal.customer_id} fixedType="call" /> : closedText,
-              email: open ? <LogContactForm opportunityId={deal.id} customerId={deal.customer_id} fixedType="email" /> : closedText,
+              email: (
+                <DealEmailPanel
+                  opportunityId={deal.id}
+                  customerEmail={deal.customer.email?.trim() || null}
+                  mailbox={mailbox?.status === "connected" ? { email: String(mailbox.email_address) } : null}
+                  mailboxNeedsRelink={mailbox?.status === "error"}
+                  emails={emails}
+                >
+                  {open ? <LogContactForm opportunityId={deal.id} customerId={deal.customer_id} fixedType="email" /> : closedText}
+                </DealEmailPanel>
+              ),
               files: (
                 <section aria-label="Files" className="space-y-3">
                   <div className="flex items-center justify-between">

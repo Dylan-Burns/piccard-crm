@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { retryLeadSubmissions } from "@/features/leads/ingest";
 import { isAuthorizedCron } from "@/lib/cron";
+import { syncAllAccounts } from "@/lib/integrations/email/mailbox";
 import { processOutbox } from "@/lib/integrations/outbox";
 import { retryEmails } from "@/lib/integrations/resend";
 
@@ -14,5 +15,7 @@ export async function GET(request: Request) {
   const leads = await retryLeadSubmissions();
   const emails = await retryEmails();
   const outbox = await processOutbox(fetch, 100);
-  return NextResponse.json({ ok: true, leads, emails, outbox });
+  // Linked mailboxes: copy new customer email onto deals.
+  const mailboxes = await syncAllAccounts();
+  return NextResponse.json({ ok: true, leads, emails, outbox, mailboxes });
 }
