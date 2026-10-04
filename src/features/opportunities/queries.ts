@@ -14,7 +14,7 @@ export async function getOpportunityDetail(id: string) {
            properties(id, label, address_line1, city, state, postal_code, access_notes, is_primary)),
          owner:profiles!opportunities_owner_id_fkey(full_name),
          source:lead_sources(name),
-         estimates(id, estimate_number, version, status, total_cents, created_at),
+         estimates(id, estimate_number, version, status, title, total_cents, created_at),
          appointments(id, type, status, starts_at),
          jobs(id, job_number, status)`,
       )

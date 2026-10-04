@@ -91,19 +91,25 @@ export async function createUploadSlots(ctx: FileContext, input: CreateUploadUrl
  * Anything that cannot be read counts as a failure. Nothing is deleted here: a path supplied by
  * the caller may belong to a file that is already registered.
  */
-async function contentIsValid(files: { storagePath: string; type: string }[]): Promise<boolean> {
+async function inspectContent(files: { storagePath: string; type: string }[]): Promise<"ok" | "missing" | "invalid"> {
   const storage = createAdminClient().storage.from(BUCKET);
   const results = await Promise.all(
-    files.map(async (file) => {
+    files.map(async (file): Promise<"ok" | "missing" | "invalid"> => {
+      // Each object is looked up by its exact path, so the cost does not grow with the size of the folder.
       const { data } = await storage.createSignedUrl(file.storagePath, 60);
-      if (!data?.signedUrl) return false;
-      const response = await fetch(data.signedUrl, { headers: { Range: "bytes=0-15" } }).catch(() => null);
-      if (!response?.ok) return false;
-      const head = new Uint8Array(await response.arrayBuffer()).slice(0, 16);
-      return contentMatchesType(head, file.type);
+      if (!data?.signedUrl) return "missing";
+      const response = await fetch(data.signedUrl, { headers: { Range: "bytes=0-15" }, signal: AbortSignal.timeout(10_000) }).catch(() => null);
+      if (!response) return "invalid";
+      if (response.status === 404 || response.status === 400) return "missing";
+      if (!response.ok) return "invalid";
+      // Read at most the first chunk, whether or not the server honoured the range.
+      const reader = response.body?.getReader();
+      const first = reader ? await reader.read() : null;
+      void reader?.cancel();
+      return first?.value && contentMatchesType(first.value.slice(0, 16), file.type) ? "ok" : "invalid";
     }),
   );
-  return results.every(Boolean);
+  return results.includes("invalid") ? "invalid" : results.includes("missing") ? "missing" : "ok";
 }
 
 /**
@@ -125,10 +131,9 @@ export async function registerUploadedFiles(ctx: FileContext, input: RegisterFil
   const registered = new Set((existing ?? []).map((r) => r.storage_path));
   const fresh = input.files.filter((f) => !registered.has(f.storagePath));
   if (fresh.length > 0) {
-    const { data: present } = await admin.storage.from(BUCKET).list(prefix.slice(0, -1), { limit: 1000 });
-    const stored = new Set((present ?? []).map((o) => `${prefix}${o.name}`));
-    if (fresh.some((f) => !stored.has(f.storagePath))) return fail("not_uploaded", "A file did not finish uploading. Try it again.");
-    if (!(await contentIsValid(fresh))) return fail("invalid", "One of the files is not a photo or PDF");
+    const verdict = await inspectContent(fresh);
+    if (verdict === "missing") return fail("not_uploaded", "A file did not finish uploading. Try it again.");
+    if (verdict === "invalid") return fail("invalid", "One of the files is not a photo or PDF");
     const { error } = await admin.rpc("mark_files_verified", { p_paths: fresh.map((f) => f.storagePath) });
     if (error) return fail("failed", "Could not save the files. Please try again.");
   }

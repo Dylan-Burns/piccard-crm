@@ -11,6 +11,7 @@ import { Timeline, type TimelineItem } from "@/components/shared/timeline";
 import { AppointmentRow } from "@/features/appointments/components/appointment-dialog";
 import { ScheduleAppointmentDialog } from "@/features/appointments/components/schedule-appointment-dialog";
 import { listAppointments, todayRange } from "@/features/appointments/queries";
+import { EstimatesPanel } from "@/features/estimates/components/estimates-panel";
 import { CATEGORY_ORDER } from "@/features/files/categories";
 import { FileGrid } from "@/features/files/components/file-grid";
 import { FileUploader } from "@/features/files/components/file-uploader";
@@ -197,7 +198,13 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
             <FileGrid files={files} permissions={{ canEdit: true, canDelete: me.role === "admin" }} />
           </section>
 
-          {/* Estimates (phase 9) add their panel here. */}
+          <EstimatesPanel
+            opportunityId={deal.id}
+            canCreate={open}
+            estimates={[...deal.estimates]
+              .sort((a, b) => b.estimate_number - a.estimate_number || b.version - a.version)
+              .map((e) => ({ id: e.id, label: estimateLabel(e), title: e.title, status: e.status, total: formatCents(e.total_cents, { alwaysCents: true }) }))}
+          />
         </div>
       </div>
     </>

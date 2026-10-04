@@ -1656,6 +1656,10 @@ export type Database = {
         }
         Returns: Json
       }
+      create_estimate: {
+        Args: { p_opportunity_id: string; p_title?: string }
+        Returns: Json
+      }
       create_lead: { Args: { p: Json }; Returns: Json }
       log_contact: {
         Args: {
@@ -1705,6 +1709,10 @@ export type Database = {
         }
         Returns: Json
       }
+      save_estimate_lines: {
+        Args: { p_estimate_id: string; p_lines: Json }
+        Returns: Json
+      }
       schedule_appointment: { Args: { p: Json }; Returns: Json }
       schedule_job: {
         Args: {
@@ -1730,6 +1738,7 @@ export type Database = {
         }
         Returns: Json
       }
+      void_estimate: { Args: { p_estimate_id: string }; Returns: Json }
     }
     Enums: {
       activity_type:

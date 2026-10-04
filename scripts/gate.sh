@@ -4,6 +4,16 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 step() { local name="$1"; shift; if out=$("$@" 2>&1); then echo "ok   $name"; else echo "FAIL $name"; echo "$out" | tail -40; exit 1; fi; }
 step "db reset"  supabase db reset
+# The reset restarts the auth service; seeding before it answers fails with a 502.
+wait_for_auth() {
+  local url; url=$(grep -E '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2- | tr -d '"')
+  for _ in $(seq 1 60); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' "$url/auth/v1/health")" != "502" ] && return 0
+    sleep 2
+  done
+  echo "auth did not come back after the reset"; return 1
+}
+step "services" wait_for_auth
 step "seed"      pnpm -s seed
 step "db types"  pnpm -s db:types
 step "lint"      pnpm -s lint
