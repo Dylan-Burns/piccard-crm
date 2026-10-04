@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -76,9 +76,11 @@ export function LogContactDialog({
   );
 }
 
-function LogContactForm({ opportunityId, customerId, onDone }: { opportunityId: string; customerId: string; onDone: () => void }) {
-  const [type, setType] = useState<ContactType>("call");
-  const [outcome, setOutcome] = useState<string>("connected");
+/** The form on its own. With `fixedType` the "How" choice is hidden (the deal page's Call and Email tabs). */
+export function LogContactForm({ opportunityId, customerId, onDone, fixedType }: { opportunityId: string; customerId: string; onDone?: () => void; fixedType?: ContactType }) {
+  const [type, setType] = useState<ContactType>(fixedType ?? "call");
+  const [outcome, setOutcome] = useState<string>(OUTCOMES[fixedType ?? "call"][0].value);
+  const summaryId = useId();
   const [state, action, pending] = useActionState(logContact, null);
   useActionToast(state, "Contact logged", onDone);
 
@@ -94,12 +96,12 @@ function LogContactForm({ opportunityId, customerId, onDone }: { opportunityId: 
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="outcome" value={outcome} />
 
-      <Choice label="How" options={TYPES} value={type} onChange={(v) => chooseType(v as ContactType)} />
+      {fixedType ? null : <Choice label="How" options={TYPES} value={type} onChange={(v) => chooseType(v as ContactType)} />}
       <Choice label="Result" options={OUTCOMES[type]} value={outcome} onChange={setOutcome} />
 
       <div className="space-y-1.5">
-        <Label htmlFor="contact-summary">Notes (optional)</Label>
-        <Textarea id="contact-summary" name="summary" rows={3} placeholder="What was said, what happens next" />
+        <Label htmlFor={summaryId}>Notes (optional)</Label>
+        <Textarea id={summaryId} name="summary" rows={3} placeholder="What was said, what happens next" />
       </div>
       <Button type="submit" className="h-11 w-full md:h-9" disabled={pending}>
         {pending ? "Saving…" : "Save"}

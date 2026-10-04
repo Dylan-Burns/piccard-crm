@@ -8,9 +8,9 @@ export async function getOpportunityDetail(id: string) {
       .from("opportunities")
       .select(
         `id, title, stage, work_type, description, estimated_value_cents, amount_cents, lost_reason, lost_notes, lost_competitor,
-         owner_id, source_id, source_detail, property_id, customer_id, created_at, possible_duplicate_of,
+         owner_id, source_id, source_detail, property_id, customer_id, created_at, stage_entered_at, possible_duplicate_of,
          is_insurance_claim, insurance_carrier, claim_number, adjuster_name, adjuster_phone, deductible_cents,
-         customer:customers!inner(id, first_name, last_name, phone, phone_e164, email,
+         customer:customers!inner(id, first_name, last_name, company_name, preferred_contact, phone, phone_e164, email,
            properties(id, label, address_line1, city, state, postal_code, access_notes, is_primary)),
          owner:profiles!opportunities_owner_id_fkey(full_name),
          source:lead_sources(name),

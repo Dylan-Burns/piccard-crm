@@ -108,3 +108,10 @@ export async function getJobStaffDetail(jobId: string, opportunityId: string) {
   ]);
   return { amountCents: deal.data?.amount_cents ?? null, owner: deal.data?.owner?.full_name ?? null, invoices: invoices.data ?? [], activities: activities.data ?? [] };
 }
+
+/** Staff only: a job's invoices, for the deal page. */
+export async function listJobInvoices(jobId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.from("invoices").select("id, invoice_number, kind, status, total_cents, due_on").eq("job_id", jobId).order("invoice_number");
+  return data ?? [];
+}

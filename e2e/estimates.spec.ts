@@ -44,6 +44,7 @@ test.describe("estimates", () => {
     await createLead(page);
     await page.getByRole("link", { name: /Roof Replacement/ }).click();
     await page.waitForURL(/\/opportunities\/[0-9a-f-]{36}$/);
+    await page.getByRole("tab", { name: "Estimates" }).click();
     await page.getByRole("region", { name: "Estimates" }).getByRole("button", { name: "New estimate" }).click();
     await page.waitForURL(/\/estimates\/[0-9a-f-]{36}$/);
     await expect(page.getByRole("heading", { name: /Estimate E-\d+/ })).toBeVisible();
@@ -109,6 +110,7 @@ test.describe("estimates", () => {
     expect(pdf.headers()["content-type"]).toBe("application/pdf");
     expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
     await page.getByRole("link", { name: "Deal" }).click();
+    await page.getByRole("tab", { name: "Estimates" }).click();
     const panel = page.getByRole("region", { name: "Estimates" });
     await expect(panel).toContainText("$15,159.50");
     await expect(panel).toContainText("Draft");
@@ -128,6 +130,7 @@ test.describe("estimates", () => {
     await createLead(page);
     await page.getByRole("link", { name: /Roof Replacement/ }).click();
     await page.waitForURL(/\/opportunities\/[0-9a-f-]{36}$/);
+    await page.getByRole("tab", { name: "Estimates" }).click();
     await page.getByRole("region", { name: "Estimates" }).getByRole("button", { name: "New estimate" }).click();
     await page.waitForURL(/\/estimates\/[0-9a-f-]{36}$/);
     await page.getByRole("button", { name: "Custom line" }).click();

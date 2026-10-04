@@ -26,6 +26,7 @@ test.describe("appointments", () => {
     const name = await createLead(page);
     await page.getByRole("link", { name: /Roof Replacement/ }).click();
 
+    await page.getByRole("tab", { name: "Appointments" }).click();
     await page.getByRole("region", { name: "Appointments" }).getByRole("button", { name: "Schedule" }).click();
     let dialog = page.getByRole("dialog");
     await dialog.getByLabel("Who is going").selectOption({ label: "Fran Field" });
@@ -102,6 +103,7 @@ test.describe("appointments", () => {
     await signIn(page, "sales@test.local");
     const name = await createLead(page);
     await page.getByRole("link", { name: /Roof Replacement/ }).click();
+    await page.getByRole("tab", { name: "Appointments" }).click();
     await page.getByRole("region", { name: "Appointments" }).getByRole("button", { name: "Schedule" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Schedule" }).click();
     await expect(page.getByText("Appointment scheduled")).toBeVisible();

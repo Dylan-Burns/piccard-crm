@@ -120,6 +120,7 @@ test.describe("pipeline", () => {
     await page.getByRole("button", { name: "Keep both" }).click();
     await expect(page.getByText("This may duplicate another open deal")).toHaveCount(0);
 
+    await page.getByRole("region", { name: "Deal details" }).getByText("Deal details").click(); // folded by default
     await page.getByLabel("Estimated value ($)").fill("18,250.50");
     await page.getByLabel("Insurance claim").check();
     await page.getByLabel("Carrier").fill("State Farm");

@@ -31,6 +31,7 @@ test.describe("files", () => {
     const name = await createLead(page);
     const customerUrl = page.url();
     await page.getByRole("link", { name: /Roof Replacement/ }).click();
+    await page.getByRole("tab", { name: "Appointments" }).click();
     await page.getByRole("region", { name: "Appointments" }).getByRole("button", { name: "Schedule" }).click();
     const schedule = page.getByRole("dialog");
     await schedule.getByLabel("Who is going").selectOption({ label: "Fran Field" });
@@ -97,6 +98,7 @@ test.describe("files", () => {
     await page.waitForURL(/\/opportunities\//); // the customer page has its own Files panel
 
     // Connection drops: every attempt to reach storage fails.
+    await page.getByRole("tab", { name: "Files" }).click();
     await page.route("**/storage/v1/object/upload/sign/**", (route) => route.abort("internetdisconnected"));
     const files = page.getByRole("region", { name: "Files" });
     await files.getByRole("button", { name: "Upload" }).click();
