@@ -2,7 +2,7 @@ import "server-only";
 import { decrypt, encrypt } from "@/lib/integrations/crypto";
 import { gmail } from "@/lib/integrations/email/gmail";
 import { microsoft } from "@/lib/integrations/email/microsoft";
-import { MailboxError, type EmailProvider, type Fetch, type MailMessage, type MailProvider } from "@/lib/integrations/email/types";
+import { isPlainEmail, MailboxError, type EmailProvider, type Fetch, type MailMessage, type MailProvider } from "@/lib/integrations/email/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database";
 
@@ -94,7 +94,7 @@ export async function syncAccount(accountId: string, options: { customerEmail?: 
       ...(options.customerEmail ? { p_customer_email: options.customerEmail } : {}),
     });
     if (addressError) throw new Error(addressError.message);
-    const addresses = (allowed ?? []).filter((a) => a !== account.email_address.toLowerCase());
+    const addresses = (allowed ?? []).filter((a) => isPlainEmail(a) && a !== account.email_address.toLowerCase());
     const since = options.customerEmail
       ? new Date(Date.now() - 365 * 86_400_000)
       : account.synced_through
@@ -150,6 +150,8 @@ export async function sendFromMailbox(userId: string, input: { opportunityId: st
   if (account.status !== "connected") return { ok: false, code: "needs_relink", message: "Your email account needs to be linked again" };
   const to = deal?.customer.email?.trim().toLowerCase();
   if (!to) return { ok: false, code: "no_email", message: "This customer has no email address" };
+  // Exactly one plain address: a value with a comma or a line break must not add recipients or headers.
+  if (!isPlainEmail(to)) return { ok: false, code: "no_email", message: "This customer's email address is not valid. Correct it before sending." };
   try {
     const token = await accessToken(db, account as Account, fetchImpl);
     const sent = await PROVIDERS[account.provider].send(token, { from: account.email_address, to, subject: input.subject, body: input.body }, fetchImpl);

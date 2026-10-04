@@ -39,8 +39,9 @@ function fake(respond: (call: Call) => { status?: number; body?: unknown }): Fet
 }
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64url");
 
-const link = (client: Client, provider: "google" | "microsoft", email: string, expiresInMs = 3_600_000) =>
-  client.rpc("save_email_account", { p_provider: provider, p_email: email, p_access_token_enc: encrypt("access-1"), p_refresh_token_enc: encrypt("refresh-1"), p_expires_at: new Date(Date.now() + expiresInMs).toISOString() });
+/** What the sign-in callback does once the provider has confirmed the address: the server saves the mailbox for that user. */
+const link = (userId: string, provider: "google" | "microsoft", email: string, expiresInMs = 3_600_000) =>
+  service.rpc("save_email_account", { p_user_id: userId, p_provider: provider, p_email: email, p_access_token_enc: encrypt("access-1"), p_refresh_token_enc: encrypt("refresh-1"), p_expires_at: new Date(Date.now() + expiresInMs).toISOString() });
 const accountOf = async (userId: string) => (await service.from("email_accounts").select("*").eq("user_id", userId).single()).data!;
 const messages = async () => (await service.from("email_messages").select("*").eq("customer_id", customerId).order("sent_at")).data!;
 const emailActivities = async () => (await service.from("activities").select("summary, actor_id, metadata").eq("opportunity_id", dealId).eq("type", "email").order("occurred_at")).data!;
@@ -74,7 +75,7 @@ afterAll(async () => {
 
 describe("linking a mailbox", () => {
   it("a staff user links their own mailbox; tokens are never readable through the API", async () => {
-    expect((await link(sales, "google", `  ${SALES_MAILBOX.toUpperCase()} `)).data).toEqual({ ok: true });
+    expect((await link(salesId, "google", `  ${SALES_MAILBOX.toUpperCase()} `)).data).toEqual({ ok: true });
     const stored = await accountOf(salesId);
     expect(stored).toMatchObject({ provider: "google", email_address: SALES_MAILBOX, status: "connected" });
     expect(stored.access_token_enc).not.toContain("access-1");
@@ -91,12 +92,23 @@ describe("linking a mailbox", () => {
     expect((await sales.from("email_accounts").insert({ user_id: adminId, provider: "google", email_address: "x@y.z" })).error?.code).toBe(PERMISSION_DENIED);
 
     // Another user's mailbox: admins see its status, other staff and field users do not
-    expect((await link(admin, "microsoft", ADMIN_MAILBOX)).data).toEqual({ ok: true });
+    expect((await link(adminId, "microsoft", ADMIN_MAILBOX)).data).toEqual({ ok: true });
     expect((await admin.from("email_accounts").select("email_address")).data!.map((r) => r.email_address).sort()).toEqual([ADMIN_MAILBOX, SALES_MAILBOX].sort());
     expect((await sales.from("email_accounts").select("email_address")).data).toEqual([{ email_address: SALES_MAILBOX }]);
     expect((await field.from("email_accounts").select("email_address")).data ?? []).toEqual([]);
-    expect((await field.rpc("save_email_account", { p_provider: "google", p_email: "f@x.y", p_access_token_enc: "a", p_refresh_token_enc: "b", p_expires_at: new Date().toISOString() })).error?.code).toBe(PERMISSION_DENIED);
-    expect((await sales.rpc("save_email_account", { p_provider: "google", p_email: "not-an-email", p_access_token_enc: "a", p_refresh_token_enc: "b", p_expires_at: new Date().toISOString() })).data).toMatchObject({ ok: false, code: "invalid" });
+    // Nobody can link a mailbox by calling the function themselves: only the server does, after the provider's sign-in
+    for (const client of [admin, sales, field]) {
+      const attempt = await client.rpc("save_email_account", { p_user_id: salesId, p_provider: "google", p_email: "ceo@roofco.example", p_access_token_enc: "a", p_refresh_token_enc: "b", p_expires_at: new Date().toISOString() });
+      expect(attempt.error?.code).toBe(PERMISSION_DENIED);
+    }
+    expect((await accountOf(salesId)).email_address).toBe(SALES_MAILBOX);
+    const { userId: fieldId } = await signInAs("field@test.local");
+    expect((await link(fieldId, "google", `field.${stamp}@roofco.example`)).data).toMatchObject({ ok: false, code: "forbidden" }); // field users cannot have one
+    expect((await link(salesId, "google", "not-an-email")).data).toMatchObject({ ok: false, code: "invalid" });
+    expect((await link(salesId, "google", `a@b.example, c@d.example`)).data).toMatchObject({ ok: false, code: "invalid" });
+    // One mailbox, one user
+    expect((await link(salesId, "microsoft", ADMIN_MAILBOX)).data).toMatchObject({ ok: false, code: "in_use" });
+    expect((await accountOf(salesId)).email_address).toBe(SALES_MAILBOX);
   });
 });
 
@@ -202,7 +214,7 @@ describe("Microsoft 365", () => {
   });
 
   it("refreshes an expiring token (keeping Microsoft's new refresh token), reads headers, and fetches bodies only for customer mail", async () => {
-    await link(admin, "microsoft", ADMIN_MAILBOX, 60_000); // about to expire
+    await link(adminId, "microsoft", ADMIN_MAILBOX, 60_000); // about to expire
     const account = await accountOf(adminId);
     const graph = fake((call) => {
       if (call.url.includes("/oauth2/v2.0/token")) return { body: { access_token: "ms-access-2", refresh_token: "ms-refresh-2", expires_in: 3600 } };
@@ -285,6 +297,26 @@ describe("whose mail can be pulled", () => {
     const searched = calls.filter((c) => c.url.includes("/messages?")).map((c) => decodeURIComponent(c.url)).join("\n");
     expect(searched).not.toContain(ADMIN_MAILBOX);
     expect(searched).not.toContain("roofco.example");
+
+    // A "customer email" carrying search operators or a second address is never used in a search or as a recipient
+    const crafted = [`x.${stamp}@evil.example} is:anywhere {from:boss@roofco.example`, `pat2.${stamp}@customer.example, spy.${stamp}@evil.example`];
+    for (const [index, email] of crafted.entries()) {
+      const { data } = await service.rpc("create_lead", { p: { channel: "manual", first_name: "Odd", last_name: `Address${stamp}${index}`, phone: `569${String(stamp).slice(-6)}${index}`, phone_e164: `+1447${String(stamp).slice(-6)}${index}`, email, owner_id: salesId } as Json });
+      const lead = data as { customer_id: string; opportunity_id: string };
+      customers.push(lead.customer_id);
+      const stored = (await service.from("customers").select("email").eq("id", lead.customer_id).single()).data!.email;
+      if (!stored) continue; // the lead form already refused it
+      expect((await service.rpc("mailbox_customer_addresses", { p_account_id: account.id })).data).not.toContain(String(stored).toLowerCase());
+      expect((await service.rpc("mailbox_customer_addresses", { p_account_id: account.id, p_customer_email: String(stored) })).data).toEqual([]);
+      calls = [];
+      expect(await sendFromMailbox(salesId, { opportunityId: lead.opportunity_id, subject: "x", body: "y" }, fake(() => ({})))).toMatchObject({ ok: false, code: "no_email" });
+      expect(calls).toEqual([]);
+    }
+    calls = [];
+    await syncAccount(account.id, { fetchImpl: fake(() => ({ body: {} })) });
+    const queries = calls.map((c) => decodeURIComponent(c.url)).join("\n");
+    expect(queries).not.toContain("is:anywhere");
+    expect(queries).not.toContain("evil.example");
 
     // An address that is not any customer's cannot be asked for either
     expect((await service.rpc("mailbox_customer_addresses", { p_account_id: account.id, p_customer_email: STRANGER })).data).toEqual([]);

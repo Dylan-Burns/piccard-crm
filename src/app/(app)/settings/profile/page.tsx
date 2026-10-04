@@ -15,6 +15,7 @@ const EMAIL_NOTICE: Record<string, { tone: "ok" | "bad"; text: string }> = {
   error: { tone: "bad", text: "The mailbox could not be linked. Try again." },
   no_refresh_token: { tone: "bad", text: "The provider did not grant ongoing access. Remove this app from your account's connected apps, then link again." },
   not_configured: { tone: "bad", text: "That provider has not been set up for this company yet." },
+  in_use: { tone: "bad", text: "That mailbox is already linked by another user. Each mailbox can be linked once." },
 };
 
 export default async function ProfilePage({ searchParams }: PageProps<"/settings/profile">) {

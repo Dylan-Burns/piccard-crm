@@ -74,3 +74,11 @@ export function htmlToText(html: string): string {
 
 /** Header values must be one line: a line break would let text become extra headers. */
 export const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
+
+/**
+ * A plain single address and nothing else. Addresses are placed into provider search queries and
+ * message headers, so anything with spaces, quotes, brackets, commas, or operators is refused.
+ */
+export function isPlainEmail(value: string): boolean {
+  return value.length <= 254 && /^[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(value);
+}

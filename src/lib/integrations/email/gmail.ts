@@ -1,6 +1,6 @@
 import "server-only";
 import { serverEnv } from "@/lib/env";
-import { htmlToText, MailboxError, oneLine, parseAddress, parseAddressList, type Fetch, type MailMessage, type MailProvider, type OutgoingMail, type Tokens } from "@/lib/integrations/email/types";
+import { htmlToText, isPlainEmail, MailboxError, oneLine, parseAddress, parseAddressList, type Fetch, type MailMessage, type MailProvider, type OutgoingMail, type Tokens } from "@/lib/integrations/email/types";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -123,9 +123,12 @@ export const gmail: MailProvider = {
 
   async listSince(token, since, addresses, fetchImpl) {
     // Gmail is asked only for mail involving these addresses, so nothing else is ever fetched.
+    // The addresses become part of the search text, so only plain ones are used: anything else
+    // could add search operators and widen the search.
+    const safe = addresses.filter(isPlainEmail);
     const ids = new Set<string>();
-    for (let i = 0; i < addresses.length && ids.size < MAX_PER_SYNC; i += CHUNK) {
-      const terms = addresses.slice(i, i + CHUNK).flatMap((a) => [`from:${a}`, `to:${a}`, `cc:${a}`]);
+    for (let i = 0; i < safe.length && ids.size < MAX_PER_SYNC; i += CHUNK) {
+      const terms = safe.slice(i, i + CHUNK).flatMap((a) => [`from:${a}`, `to:${a}`, `cc:${a}`]);
       const q = `after:${Math.floor(since.getTime() / 1000)} {${terms.join(" ")}}`;
       const page = await api<{ messages?: { id: string }[] }>(fetchImpl, token, `/messages?maxResults=100&q=${encodeURIComponent(q)}`);
       for (const m of page.messages ?? []) ids.add(m.id);

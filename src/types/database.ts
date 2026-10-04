@@ -1991,6 +1991,7 @@ export type Database = {
           p_expires_at: string
           p_provider: Database["public"]["Enums"]["email_provider"]
           p_refresh_token_enc: string
+          p_user_id: string
         }
         Returns: Json
       }
