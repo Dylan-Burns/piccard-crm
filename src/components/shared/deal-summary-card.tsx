@@ -37,7 +37,7 @@ export function DealSummaryCard({ deal, actions, href }: { deal: DealSummary; ac
     </>
   );
   return (
-    <article className="rounded-md border p-3">
+    <article className="rounded-md border bg-card p-3">
       <div className="flex items-start justify-between gap-3">
         <h3 className="min-w-0 text-base font-semibold">
           {href ? (

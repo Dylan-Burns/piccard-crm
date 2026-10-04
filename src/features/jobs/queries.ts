@@ -104,7 +104,7 @@ export async function getJobStaffDetail(jobId: string, opportunityId: string) {
   const [deal, invoices, activities] = await Promise.all([
     supabase.from("opportunities").select("amount_cents, owner:profiles!opportunities_owner_id_fkey(full_name)").eq("id", opportunityId).maybeSingle(),
     supabase.from("invoices").select("id, invoice_number, kind, status, total_cents, due_on").eq("job_id", jobId).order("invoice_number"),
-    supabase.from("activities").select("id, type, summary, occurred_at").eq("opportunity_id", opportunityId).order("occurred_at", { ascending: false }).limit(30),
+    supabase.from("activities").select("id, type, summary, metadata, occurred_at, actor:profiles(full_name)").eq("opportunity_id", opportunityId).order("occurred_at", { ascending: false }).limit(30),
   ]);
   return { amountCents: deal.data?.amount_cents ?? null, owner: deal.data?.owner?.full_name ?? null, invoices: invoices.data ?? [], activities: activities.data ?? [] };
 }

@@ -31,7 +31,7 @@ export function WeekGrid({ days, items, permissions, users }: { days: DayColumn[
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="grid min-h-[60dvh] grid-cols-7 divide-x rounded-md border">
+      <div className="grid min-h-[60dvh] grid-cols-7 divide-x rounded-md border bg-card">
         {days.map((column) => (
           <Day key={column.day} column={column}>
             {shown

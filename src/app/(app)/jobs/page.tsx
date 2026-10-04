@@ -68,7 +68,7 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
             <ul className="space-y-3 md:hidden">
               {jobs.map((job) => (
                 <li key={job.id}>
-                  <Link href={`/jobs/${job.id}`} className="block space-y-1 rounded-md border p-3">
+                  <Link href={`/jobs/${job.id}`} className="block space-y-1 rounded-md border bg-card p-3">
                     <div className="flex items-start justify-between gap-2">
                       <p className="min-w-0 font-semibold">
                         <span className="tabular">{job.number}</span> · {job.customerName}
@@ -85,7 +85,7 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
               ))}
             </ul>
             {/* Desktop: table */}
-            <div className="hidden overflow-x-auto rounded-md border md:block">
+            <div className="hidden overflow-x-auto rounded-md border bg-card md:block">
               <table className="w-full text-left">
                 <thead className="border-b bg-muted/50 text-xs text-muted-foreground">
                   <tr>

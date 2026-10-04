@@ -40,8 +40,8 @@ export function DealWorkspace({ panels, focus, history }: { panels: Record<DealT
 
   return (
     <div className="space-y-6">
-      <section aria-label="Add to this deal" className="rounded-md border">
-        <div role="tablist" aria-label="What to add" className="flex overflow-x-auto border-b">
+      <section aria-label="Add to this deal" className="rounded-md border bg-card">
+        <div role="tablist" aria-label="What to add" className="flex overflow-x-auto rounded-t-md border-b bg-muted">
           {TABS.map((item) => {
             const Icon = item.icon;
             const selected = tab === item.key;
@@ -56,7 +56,7 @@ export function DealWorkspace({ panels, focus, history }: { panels: Record<DealT
                 onClick={() => choose(item)}
                 className={cn(
                   "-mb-px flex h-11 shrink-0 items-center gap-1 border-b-2 px-2.5 md:h-10 md:px-2 lg:px-2.5",
-                  selected ? "border-primary bg-primary/5 font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
+                  selected ? "border-primary bg-card font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="size-4" aria-hidden />
@@ -72,13 +72,13 @@ export function DealWorkspace({ panels, focus, history }: { panels: Record<DealT
         ))}
       </section>
 
-      <section aria-label="Focus" className="space-y-3">
-        <h2 className="font-semibold">Focus</h2>
+      <section aria-label="Focus" className="panel space-y-3">
+        <h2 className="panel-head font-semibold">Focus</h2>
         {focus}
       </section>
 
-      <section aria-label="History" className="space-y-3">
-        <h2 className="font-semibold">History</h2>
+      <section aria-label="History" className="panel space-y-3">
+        <h2 className="panel-head font-semibold">History</h2>
         <div role="group" aria-label="Filter history" className="-mx-1 flex gap-1 overflow-x-auto px-1">
           {HISTORY_FILTERS.map((item) => {
             const count = counts.get(item.key) ?? 0;

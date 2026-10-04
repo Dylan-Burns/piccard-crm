@@ -57,7 +57,7 @@ export default async function CustomersPage({ searchParams }: PageProps<"/custom
             description={q ? "Try a name, phone number, email, or street address." : "Customers are created when a lead comes in."}
           />
         ) : (
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y rounded-md border bg-card">
             {customers.map((customer) => {
               const address = primaryAddress(customer);
               const open = openDeals(customer);

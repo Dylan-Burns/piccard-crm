@@ -24,7 +24,7 @@ export default async function EstimatePage({ params }: PageProps<"/opportunities
 
   return (
     <>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 md:px-6">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b bg-background px-4 py-4 md:px-6">
         <div className="min-w-0">
           <Link href={`/opportunities/${id}`} className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground md:min-h-0">
             <ChevronLeft className="size-4" aria-hidden />

@@ -45,7 +45,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/tasks">) {
         description={`${items.length} open`}
         actions={
           isStaff ? (
-            <div className="flex rounded-md border p-0.5" role="group" aria-label="Whose tasks">
+            <div className="flex rounded-md border bg-card p-0.5" role="group" aria-label="Whose tasks">
               <Toggle href="/tasks" active={!showAll} label="Mine" />
               <Toggle href="/tasks?who=all" active={showAll} label="Everyone" />
             </div>

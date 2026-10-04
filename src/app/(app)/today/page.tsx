@@ -38,14 +38,14 @@ export default async function TodayPage() {
     <>
       <PageHeader title="Today" description={formatDay(today, "long")} />
       <div className="space-y-6 p-4 md:max-w-2xl md:p-6">
-        <section className="space-y-3" aria-label="Appointments">
-          <h2 className="font-semibold">Appointments</h2>
+        <section className="panel space-y-3" aria-label="Appointments">
+          <h2 className="panel-head font-semibold">Appointments</h2>
           {appointments.length === 0 ? (
             <EmptyState icon={CalendarCheck} title="Nothing scheduled today" />
           ) : (
             <ul className="space-y-3">
               {appointments.map((item) => (
-                <li key={item.id} className="space-y-3 rounded-md border p-3">
+                <li key={item.id} className="space-y-3 rounded-md border bg-card p-3">
                   <div>
                     <p className="text-xs font-medium text-primary tabular">
                       {item.timeLabel} · {item.typeLabel}
@@ -98,9 +98,9 @@ export default async function TodayPage() {
         </section>
 
         {jobs.data && jobs.data.length > 0 ? (
-          <section className="space-y-3" aria-label="My jobs">
-            <h2 className="font-semibold">My jobs</h2>
-            <ul className="divide-y rounded-md border">
+          <section className="panel space-y-3" aria-label="My jobs">
+            <h2 className="panel-head font-semibold">My jobs</h2>
+            <ul className="divide-y rounded-md border bg-card">
               {jobs.data.map((job) => (
                 <li key={job.id}>
                   <Link href={`/jobs/${job.id}`} className="flex min-h-12 items-center justify-between gap-3 px-3 py-2 hover:bg-muted/50">
@@ -115,8 +115,8 @@ export default async function TodayPage() {
           </section>
         ) : null}
 
-        <section className="space-y-3" aria-label="My tasks">
-          <h2 className="font-semibold">My tasks</h2>
+        <section className="panel space-y-3" aria-label="My tasks">
+          <h2 className="panel-head font-semibold">My tasks</h2>
           <TaskList tasks={taskItems} revalidate="/today" emptyText="No open tasks." />
         </section>
       </div>

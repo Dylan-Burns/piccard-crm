@@ -38,7 +38,7 @@ export function EstimatesPanel({ opportunityId, estimates, canCreate }: { opport
       {estimates.length === 0 ? (
         <p className="text-muted-foreground">No estimates yet.</p>
       ) : (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y rounded-md border bg-card">
           {estimates.map((estimate) => (
             <li key={estimate.id} className="flex min-h-11 flex-wrap items-center justify-between gap-2 px-3 py-1.5">
               <Link href={`/opportunities/${opportunityId}/estimates/${estimate.id}`} className="min-w-0 flex-1 py-1 hover:underline">

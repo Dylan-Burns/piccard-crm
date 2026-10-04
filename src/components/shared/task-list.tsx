@@ -20,7 +20,7 @@ export type TaskItem = {
 export function TaskList({ tasks, revalidate, emptyText = "No open tasks." }: { tasks: TaskItem[]; revalidate: string; emptyText?: string }) {
   if (tasks.length === 0) return <p className="text-muted-foreground">{emptyText}</p>;
   return (
-    <ul className="divide-y rounded-md border">
+    <ul className="divide-y rounded-md border bg-card">
       {tasks.map((task) => (
         <TaskRow key={task.id} task={task} revalidate={revalidate} />
       ))}

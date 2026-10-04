@@ -51,7 +51,7 @@ export default async function LeadsPage() {
               ))}
             </ul>
             {/* Desktop: table */}
-            <div className="hidden overflow-x-auto rounded-md border md:block">
+            <div className="hidden overflow-x-auto rounded-md border bg-card md:block">
               <table className="w-full text-left">
                 <thead className="border-b bg-muted/50 text-xs text-muted-foreground">
                   <tr>
@@ -134,7 +134,7 @@ function LeadTableRow({ lead, staff, timeZone }: { lead: LeadRow; staff: StaffOp
 function LeadCard({ lead, staff, timeZone }: { lead: LeadRow; staff: StaffOption[]; timeZone: string }) {
   const tel = telHref(lead.customer.phone, lead.customer.phone_e164);
   return (
-    <li className={cn("space-y-3 rounded-md border p-3", !lead.owner_id && "border-warning/50 bg-warning/5")}>
+    <li className={cn("space-y-3 rounded-md border bg-card p-3", !lead.owner_id && "border-warning/50 bg-warning/5")}>
       <div className="flex items-start justify-between gap-3">
         <Link href={`/opportunities/${lead.id}`} className="min-w-0">
           <p className="truncate font-medium">{name(lead)}</p>

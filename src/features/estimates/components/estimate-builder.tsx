@@ -135,7 +135,7 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
   return (
     <div className="grid gap-6 p-4 pb-0 md:grid-cols-[minmax(0,1fr)_18rem] md:p-6">
       <div className="space-y-6">
-        <section aria-label="Details" className="grid gap-3 md:grid-cols-2">
+        <section aria-label="Details" className="panel grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="title">Title</Label>
             <Input id="title" value={title} disabled={!editable} onChange={(e) => edit(setTitle)(e.target.value)} className={inputClass} />
@@ -151,8 +151,8 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
           </div>
         </section>
 
-        <section aria-label="Lines" className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        <section aria-label="Lines" className="panel space-y-3">
+          <div className="panel-head flex-wrap">
             <h2 className="font-semibold">Lines</h2>
             {editable ? (
               <div className="flex gap-2">
@@ -205,7 +205,7 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
               const quantity = quantityOf(line);
               const total = Number.isNaN(quantity) ? null : lineTotalCents({ quantity, unitPriceCents: parseDollarsToCents(line.price) ?? 0 });
               return (
-                <li key={line.key} aria-label={`Line ${n}`} className="grid grid-cols-6 gap-2 rounded-md border p-3 md:grid-cols-[minmax(0,1fr)_4.5rem_4rem_6.5rem_auto_6.5rem_auto] md:items-start md:rounded-none md:border-0">
+                <li key={line.key} aria-label={`Line ${n}`} className="grid grid-cols-6 gap-2 rounded-md border bg-card p-3 md:grid-cols-[minmax(0,1fr)_4.5rem_4rem_6.5rem_auto_6.5rem_auto] md:items-start md:rounded-none md:border-0">
                   <div className="col-span-6 space-y-1.5 md:col-span-1">
                     <Input aria-label={`Line ${n} name`} placeholder="Item" value={line.name} disabled={!editable} onChange={(e) => patchLine(line.key, { name: e.target.value })} className={inputClass} />
                     <Input aria-label={`Line ${n} description`} placeholder="Description (optional)" value={line.description} disabled={!editable} onChange={(e) => patchLine(line.key, { description: e.target.value })} className="h-11 text-muted-foreground md:h-8" />
@@ -244,14 +244,14 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
           ) : null}
         </section>
 
-        <section aria-label="Terms" className="space-y-1.5">
+        <section aria-label="Terms" className="panel space-y-1.5">
           <Label htmlFor="terms">Terms</Label>
           <Textarea id="terms" rows={6} value={terms} disabled={!editable} onChange={(e) => edit(setTerms)(e.target.value)} />
         </section>
       </div>
 
       {/* Totals: a side panel on desktop, a bar pinned above the tab bar on phones */}
-      <aside aria-label="Totals" className="sticky bottom-16 z-10 -mx-4 space-y-3 border-t bg-background p-4 md:static md:mx-0 md:self-start md:rounded-md md:border md:p-3">
+      <aside aria-label="Totals" className="sticky bottom-16 z-10 -mx-4 space-y-3 border-t bg-background p-4 md:static md:mx-0 md:self-start md:rounded-md md:border md:bg-card md:p-3">
         <div className="hidden gap-3 md:grid">
           <TotalsFields discount={discount} taxPercent={taxPercent} depositPercent={depositPercent} editable={editable} errors={errors} onDiscount={edit(setDiscount)} onTax={edit(setTaxPercent)} onDeposit={edit(setDepositPercent)} idPrefix="side" />
         </div>
@@ -290,7 +290,7 @@ export function EstimateBuilder({ estimate, priceBook }: { estimate: BuilderEsti
       </aside>
 
       {/* On phones the three rate fields sit in the page flow, above the pinned totals bar. */}
-      <section aria-label="Discount, tax, and deposit" className="grid gap-3 md:hidden">
+      <section aria-label="Discount, tax, and deposit" className="panel grid gap-3 md:hidden">
         <TotalsFields discount={discount} taxPercent={taxPercent} depositPercent={depositPercent} editable={editable} errors={errors} onDiscount={edit(setDiscount)} onTax={edit(setTaxPercent)} onDeposit={edit(setDepositPercent)} idPrefix="flow" />
       </section>
     </div>

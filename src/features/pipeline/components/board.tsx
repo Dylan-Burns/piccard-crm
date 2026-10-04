@@ -155,9 +155,10 @@ function NextStepChip({ next }: { next: BoardDeal["next"] }) {
 
 function DealCardBody({ deal, className, footer }: { deal: BoardDeal; className?: string; footer?: React.ReactNode }) {
   return (
-    <article className={cn("rounded-md border bg-background p-2.5", className)}>
+    <article className={cn("relative rounded-md border bg-background p-2.5 hover:border-primary/50", className)}>
       <div className="flex items-start justify-between gap-2">
-        <Link href={`/opportunities/${deal.id}`} className="min-w-0 truncate font-semibold hover:underline" draggable={false}>
+        {/* The link's ::after covers the card, so a click anywhere opens the deal; a drag still moves it. */}
+        <Link href={`/opportunities/${deal.id}`} className="min-w-0 truncate font-semibold after:absolute after:inset-0 hover:underline" draggable={false}>
           {deal.name}
         </Link>
         <span className="shrink-0 tabular">{deal.value ?? ""}</span>
@@ -238,7 +239,7 @@ function MobileBoard({ byStage, onMove }: { byStage: (s: string) => BoardDeal[];
             key={deal.id}
             deal={deal}
             footer={
-              <Button variant="outline" className="mt-2 h-11 w-full" onClick={() => setMoving(deal)}>
+              <Button variant="outline" className="relative z-10 mt-2 h-11 w-full" onClick={() => setMoving(deal)}>
                 Move
               </Button>
             }

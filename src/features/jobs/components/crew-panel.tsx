@@ -26,7 +26,7 @@ export function CrewEditor({ jobId, crew, users }: { jobId: string; crew: StaffO
       {crew.length === 0 ? (
         <p className="text-muted-foreground">No one is assigned yet.</p>
       ) : (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y rounded-md border bg-card">
           {crew.map((member) => (
             <li key={member.id} className="flex min-h-11 items-center justify-between gap-2 px-3">
               <span className="truncate">{member.name}</span>

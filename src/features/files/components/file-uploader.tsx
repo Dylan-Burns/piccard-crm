@@ -292,7 +292,7 @@ export function FileUploader({
         {!chosenTarget ? <p className="text-muted-foreground">Choose the deal these files belong to first.</p> : null}
 
         {items.length > 0 ? (
-          <ul aria-label="Uploads" className="max-h-64 divide-y overflow-y-auto rounded-md border">
+          <ul aria-label="Uploads" className="max-h-64 divide-y overflow-y-auto rounded-md border bg-card">
             {items.map((item) => (
               <li key={item.key} className="flex min-h-11 items-center gap-2 px-3 py-1.5">
                 {item.status === "saved" ? (

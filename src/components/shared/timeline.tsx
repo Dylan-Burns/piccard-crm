@@ -48,6 +48,8 @@ export type TimelineItem = {
   shared?: boolean;
   /** Preformatted in the company timezone. */
   when: string;
+  /** Who did it, when the summary does not already say. */
+  actor?: string | null;
   /** Shown when the customer has more than one deal. */
   dealLabel?: string | null;
 };
@@ -67,7 +69,11 @@ export function Timeline({ items, emptyText = "Nothing has happened yet." }: { i
             <div className="min-w-0 flex-1 pt-0.5">
               <p>
                 {item.summary}
-                <span className="text-xs text-muted-foreground"> · {item.when}</span>
+                <span className="text-xs text-muted-foreground">
+                  {" "}
+                  · {item.when}
+                  {item.actor ? ` · ${item.actor}` : ""}
+                </span>
               </p>
               {item.detail ? <p className="mt-1 rounded-md bg-muted px-2.5 py-1.5 whitespace-pre-wrap">{item.detail}</p> : null}
               {item.shared || item.dealLabel ? (

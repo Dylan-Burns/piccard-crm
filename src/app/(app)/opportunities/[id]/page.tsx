@@ -29,6 +29,7 @@ import { DuplicateBanner } from "@/features/opportunities/components/duplicate-b
 import { historyKind } from "@/features/opportunities/history";
 import { getOpportunityDetail, listDealLabels } from "@/features/opportunities/queries";
 import { estimateLabel, summarizeDeal } from "@/features/opportunities/summary";
+import { activityActor, activityText } from "@/lib/activity";
 import { requireRole } from "@/lib/auth";
 import { age, dueState, formatDateTime, relativeTime, tomorrowAtNine } from "@/lib/dates";
 import { JOB_STATUS_LABELS, LOST_REASON_LABELS } from "@/lib/deal-status";
@@ -82,7 +83,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
   const history: HistoryItem[] = activities.map((a) => {
     const meta = (a.metadata ?? {}) as { note_id?: string; notes?: string | null };
     const note = meta.note_id ? noteById.get(meta.note_id) : undefined;
-    const item: TimelineItem = { id: a.id, type: a.type, summary: a.summary, detail: note?.body ?? meta.notes ?? null, shared: note?.shared_with_crew ?? false, when: relativeTime(a.occurred_at) };
+    const item: TimelineItem = { id: a.id, type: a.type, summary: activityText(a), detail: note?.body ?? meta.notes ?? null, shared: note?.shared_with_crew ?? false, when: relativeTime(a.occurred_at), actor: activityActor(a) };
     return { ...item, kind: historyKind(a.type) };
   });
   const upcoming = appointments.filter((a) => a.status === "scheduled");
@@ -97,7 +98,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
 
   return (
     <>
-      <header className="space-y-3 border-b px-4 py-4 md:px-6">
+      <header className="space-y-3 border-b bg-background px-4 py-4 md:px-6">
         <div>
           <Link href={`/customers/${deal.customer_id}`} className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground md:min-h-0">
             <ChevronLeft className="size-4" aria-hidden />
@@ -105,7 +106,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
           </Link>
           <h1 className="text-xl font-semibold">{deal.title}</h1>
         </div>
-        <DealStageControls deal={movable} stage={deal.stage} staff={staff} users={users} today={today} />
+        <DealStageControls deal={movable} stage={deal.stage} inStage={age(deal.stage_entered_at)} staff={staff} users={users} today={today} />
         {deal.stage === "lost" ? (
           <p className="text-muted-foreground">
             Lost: {deal.lost_reason ? LOST_REASON_LABELS[deal.lost_reason] : "no reason"}
@@ -119,10 +120,10 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
         {/* Sidebar: what the deal is. On phones it follows the working area. */}
         <div className="order-2 md:order-1">
           <DealSummaryCard deal={summarizeDeal(deal, address, timeZone)} />
-          <section aria-label="Labels and close date" className="mt-3 border-b pb-3">
+          <section aria-label="Labels and close date" className="panel mt-3">
             <DealQuickFields dealId={deal.id} labels={deal.labels} expectedCloseOn={deal.expected_close_on} suggestions={labelSuggestions} editable />
           </section>
-          <div className="mt-1">
+          <div className="mt-3 space-y-3">
             <CollapsibleSection title="Customer">
               <p>
                 <Link href={`/customers/${deal.customer_id}`} className="font-medium text-primary hover:underline">
@@ -251,7 +252,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
               <div className="space-y-3">
                 <TaskList tasks={taskItems} revalidate={path} emptyText={open ? "No next step set." : "No open tasks."} />
                 {upcoming.length > 0 ? (
-                  <ul className="divide-y overflow-hidden rounded-md border">
+                  <ul className="divide-y overflow-hidden rounded-md border bg-card">
                     {upcoming.map((item) => (
                       <li key={item.id}>
                         <AppointmentRow item={item} permissions={{ isStaff: true, userId: me.id }} users={users} showDay />
@@ -286,7 +287,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
                   {appointments.length === 0 ? (
                     <p className="text-muted-foreground">Nothing scheduled.</p>
                   ) : (
-                    <ul className="divide-y overflow-hidden rounded-md border">
+                    <ul className="divide-y overflow-hidden rounded-md border bg-card">
                       {appointments.map((item) => (
                         <li key={item.id}>
                           <AppointmentRow item={item} permissions={{ isStaff: true, userId: me.id }} users={users} showDay />
@@ -333,7 +334,7 @@ export default async function OpportunityPage({ params }: PageProps<"/opportunit
                   {invoices.length === 0 ? (
                     <p className="text-muted-foreground">No invoices. They are created from the accepted estimate when the deal is won.</p>
                   ) : (
-                    <ul className="divide-y rounded-md border">
+                    <ul className="divide-y rounded-md border bg-card">
                       {invoices.map((invoice) => (
                         <li key={invoice.id} className="flex min-h-10 items-center justify-between gap-3 px-3 py-1.5">
                           <span>

@@ -41,7 +41,7 @@ export function AppShell({ user, companyName, children }: { user: ShellUser; com
         </header>
 
         {/* pb clears the fixed bottom tab bar on mobile, including the iOS home indicator */}
-        <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
+        <main className="min-w-0 flex-1 bg-muted pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
       </div>
 
       <BottomTabs tabs={nav.tabs} more={nav.more} pathname={pathname} />

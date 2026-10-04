@@ -72,6 +72,18 @@ test.describe("pipeline", () => {
     expect(page.url()).toContain("owner=all");
   });
 
+  test("clicking anywhere on a card opens the deal", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "one run is enough");
+    await signIn(page, "sales@test.local");
+    const name = await createLead(page, { workType: "gutters" });
+    await page.goto("/pipeline");
+    const card = page.getByRole("article").filter({ hasText: name });
+    const box = (await card.boundingBox())!;
+    await page.mouse.click(box.x + box.width - 12, box.y + box.height - 8); // bottom-right corner, away from the name
+    await page.waitForURL(/\/opportunities\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Gutters");
+  });
+
   test("won creates a job; lost needs a reason; a lost deal can be reopened", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "one run is enough");
     await signIn(page, "sales@test.local");
@@ -86,7 +98,7 @@ test.describe("pipeline", () => {
     await expect(dialog.getByLabel(/^Notes/)).toBeFocused(); // browser blocks submit: notes are required for "other"
     await dialog.getByLabel("Reason").selectOption("price");
     await dialog.getByRole("button", { name: "Mark lost" }).click();
-    await expect(page.getByText("Lost: Price")).toBeVisible();
+    await expect(page.getByText("Lost: Price").first()).toBeVisible(); // header line; the history says it too
     await expect(page.getByRole("button", { name: "Won", exact: true })).toHaveCount(0);
 
     await page.getByLabel("Reopen to stage").selectOption("contacted");

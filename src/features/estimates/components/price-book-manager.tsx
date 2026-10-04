@@ -19,7 +19,7 @@ export function PriceBookManager({ items }: { items: PriceBookItem[] }) {
       {items.length === 0 ? (
         <p className="text-muted-foreground">No items yet. Add the things you quote most often.</p>
       ) : (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y rounded-md border bg-card">
           {items.map((item) => (
             <ItemRow key={item.id} item={item} />
           ))}
@@ -136,7 +136,7 @@ function AddItemForm() {
   useActionToast(state, "Item added", () => formRef.current?.reset());
   const errors = state?.ok === false ? state.error.fields : undefined;
   return (
-    <form ref={formRef} action={action} className="space-y-3 rounded-md border p-3">
+    <form ref={formRef} action={action} className="space-y-3 rounded-md border bg-card p-3">
       <h3 className="font-medium">Add an item</h3>
       <Fields errors={errors} idPrefix="new" />
       <Button type="submit" className="h-11 md:h-9" disabled={pending}>

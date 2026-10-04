@@ -132,7 +132,7 @@ function Choice({
             aria-pressed={value === option.value}
             onClick={() => onChange(option.value)}
             className={cn(
-              "h-11 rounded-md border px-3 md:h-9",
+              "h-11 rounded-md border bg-card px-3 md:h-9",
               value === option.value ? "border-primary bg-primary/10 font-medium text-primary" : "hover:bg-muted",
             )}
           >

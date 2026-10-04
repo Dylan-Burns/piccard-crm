@@ -15,7 +15,7 @@ import type { Database } from "@/types/database";
 type Stage = Database["public"]["Enums"]["opportunity_stage"];
 
 /** Stage stepper with move, Won, Lost, and Reopen (spec §5.4). */
-export function DealStageControls({ deal, stage, staff, users, today }: { deal: MovableDeal; stage: Stage; staff: StaffOption[]; users: StaffOption[]; today: string }) {
+export function DealStageControls({ deal, stage, inStage, staff, users, today }: { deal: MovableDeal; stage: Stage; /** How long the deal has been in its stage, e.g. "4 days". */ inStage: string; staff: StaffOption[]; users: StaffOption[]; today: string }) {
   const { move, dialogs, pending } = useDealMoves({ staff, users, today });
   const [reopening, startReopen] = useTransition();
   const currentIndex = OPEN_STAGES.indexOf(stage as OpenStage);
@@ -23,28 +23,35 @@ export function DealStageControls({ deal, stage, staff, users, today }: { deal: 
 
   return (
     <div className="space-y-3">
-      {/* Stepper: desktop shows every stage as a button; phones use the select below. */}
-      <ol className="hidden gap-1 md:flex" aria-label="Stages">
+      {/* Stepper: arrows on desktop, showing the time in the current stage; phones use the select below. */}
+      <ol className="hidden md:flex" aria-label="Stages">
         {OPEN_STAGES.map((s, index) => {
           const done = !closed && index < currentIndex;
           const current = s === stage;
           return (
-            <li key={s} className="min-w-0 flex-1">
+            <li key={s} className={cn("min-w-0", current ? "flex-[1.5]" : "flex-1", index > 0 && "-ml-1.5")}>
               <button
                 type="button"
                 disabled={closed || current || pending}
                 onClick={() => move(deal, s)}
                 aria-current={current ? "step" : undefined}
                 className={cn(
-                  "flex h-9 w-full items-center justify-center gap-1 truncate rounded-md border px-2 text-xs",
-                  current && "border-primary bg-primary font-medium text-primary-foreground",
-                  done && "border-primary/30 bg-primary/10 text-primary",
-                  !current && !done && "text-muted-foreground",
-                  !closed && !current && "hover:border-primary/60",
+                  "flex h-9 w-full items-center justify-center gap-1 px-4 text-xs",
+                  // Arrow shape: a point on the right, a matching notch on the left (none on the first).
+                  index === 0
+                    ? "rounded-l-md [clip-path:polygon(0_0,calc(100%-10px)_0,100%_50%,calc(100%-10px)_100%,0_100%)]"
+                    : "[clip-path:polygon(0_0,calc(100%-10px)_0,100%_50%,calc(100%-10px)_100%,0_100%,10px_50%)]",
+                  current && "bg-primary font-medium text-primary-foreground",
+                  done && "bg-primary/20 text-primary",
+                  !current && !done && "bg-border/70 text-muted-foreground",
+                  !closed && !current && "hover:bg-primary/30 hover:text-primary",
                 )}
               >
                 {done ? <Check className="size-3 shrink-0" aria-hidden /> : null}
-                <span className="truncate">{STAGE_LABELS[s]}</span>
+                <span className="truncate">
+                  {current ? `${inStage} · ` : ""}
+                  {STAGE_LABELS[s]}
+                </span>
               </button>
             </li>
           );

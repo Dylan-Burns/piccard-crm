@@ -20,6 +20,7 @@ import { FileUploader } from "@/features/files/components/file-uploader";
 import { listFiles } from "@/features/files/queries";
 import { LogContactDialog } from "@/features/leads/components/log-contact-dialog";
 import { summarizeDeal } from "@/features/opportunities/summary";
+import { activityActor, activityText } from "@/lib/activity";
 import { requireRole } from "@/lib/auth";
 import { dueState, formatDateTime, relativeTime, tomorrowAtNine } from "@/lib/dates";
 import { formatPhone, telHref } from "@/lib/phone";
@@ -64,7 +65,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
     return {
       id: a.id,
       type: a.type,
-      summary: a.summary,
+      summary: activityText(a),
+      actor: activityActor(a),
       detail: note?.body ?? meta.notes ?? null,
       shared: note?.shared_with_crew ?? false,
       when: relativeTime(a.occurred_at),
@@ -169,7 +171,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
 
       <CustomerPanels
         timeline={
-          <div className="space-y-4">
+          <div className="panel space-y-4">
+            <h2 className="panel-head font-semibold">Timeline</h2>
             <div className="hidden md:block">
               <NoteComposer parent={noteParent} revalidate={path} showShare />
             </div>
@@ -188,8 +191,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
           </div>
         }
         tasks={
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="panel space-y-3">
+            <div className="panel-head">
               <h2 className="font-semibold">Next steps</h2>
               <AddTaskDialog parent={noteParent} users={users} defaultAssignee={me.id} defaultDue={defaultDue} revalidate={path} />
             </div>
@@ -197,8 +200,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
           </div>
         }
         files={
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="panel space-y-3">
+            <div className="panel-head">
               <h2 className="font-semibold">Files</h2>
               <FileUploader
                 target={uploadTarget}
@@ -219,8 +222,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
         }
         details={
           <div className="space-y-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="panel space-y-2">
+              <div className="panel-head">
                 <h2 className="font-semibold">Contact details</h2>
                 <EditCustomerDialog
                   customer={customer}
@@ -240,8 +243,8 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
                 <Detail label="Prefers" value={customer.preferred_contact} />
               </dl>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="panel space-y-2">
+              <div className="panel-head">
                 <h2 className="font-semibold">Properties</h2>
                 <PropertyDialog
                   customerId={customer.id}
@@ -256,7 +259,7 @@ export default async function CustomerPage({ params }: PageProps<"/customers/[id
               {customer.properties.length === 0 ? (
                 <p className="text-muted-foreground">No properties yet.</p>
               ) : (
-                <ul className="divide-y rounded-md border">
+                <ul className="divide-y rounded-md border bg-card">
                   {customer.properties.map((property) => (
                     <li key={property.id} className="flex items-start justify-between gap-2 p-3">
                       <div className="min-w-0">

@@ -20,7 +20,7 @@ export function LeadSourcesManager({ sources }: { sources: Source[] }) {
 
   return (
     <div className="space-y-4">
-      <ul className="divide-y rounded-md border">
+      <ul className="divide-y rounded-md border bg-card">
         {sources.map((source, index) => (
           <SourceRow key={source.id} source={source} first={index === 0} last={index === sources.length - 1} />
         ))}

@@ -69,8 +69,8 @@
   --destructive: oklch(0.577 0.245 27.325);          /* red-600 */
   --success: oklch(0.627 0.194 149.214);             /* green-600 */
   --warning: oklch(0.666 0.179 58.318);              /* amber-600 */
-  --border: oklch(0.929 0.013 255.508);              /* slate-200 */
-  --input: oklch(0.929 0.013 255.508);
+  --border: oklch(0.869 0.022 252.894);              /* slate-300: section lines must be clearly visible */
+  --input: oklch(0.869 0.022 252.894);
   --ring: oklch(0.546 0.245 262.881);
   --chart-1: oklch(0.546 0.245 262.881);
   --chart-2: oklch(0.704 0.04 256.788);
@@ -135,4 +135,14 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+}
+/*
+ * Visual structure: the page is light slate; every section is a white panel with a border and a
+ * tinted header band, so blocks read as separate at a glance (borders, not shadows: spec §5.7).
+ */
+@utility panel {
+  @apply rounded-md border bg-card p-3;
+}
+@utility panel-head {
+  @apply -mx-3 -mt-3 flex min-h-10 items-center justify-between gap-2 rounded-t-md border-b bg-secondary px-3 py-1.5;
 }

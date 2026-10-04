@@ -96,7 +96,7 @@ export function FileGrid({
               </>
             ) : null}
             {listed.length > 0 ? (
-              <ul className="divide-y rounded-md border">
+              <ul className="divide-y rounded-md border bg-card">
                 {listed.map((file) => (
                   <li key={file.id} className="flex min-h-11 items-center gap-2 px-3 py-1.5">
                     <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />

@@ -17,7 +17,7 @@ type UserRow = Pick<
 
 export function UsersTable({ users, currentUserId }: { users: UserRow[]; currentUserId: string }) {
   return (
-    <ul className="divide-y rounded-md border">
+    <ul className="divide-y rounded-md border bg-card">
       {users.map((user) => (
         <UserRowItem key={user.id} user={user} isSelf={user.id === currentUserId} />
       ))}

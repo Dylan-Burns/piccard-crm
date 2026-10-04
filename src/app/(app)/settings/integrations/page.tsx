@@ -50,7 +50,7 @@ export default async function IntegrationsPage() {
           <p className="text-muted-foreground">Leads from the website and Google Ads arrive here and are created, or merged into an open deal for the same customer and address.</p>
         </div>
 
-        <div className="space-y-3 rounded-md border p-3">
+        <div className="space-y-3 rounded-md border bg-card p-3">
           <h3 className="flex items-center gap-2 font-medium">
             Website form <Configured ok={configured.website} />
           </h3>
@@ -68,7 +68,7 @@ export default async function IntegrationsPage() {
           </p>
         </div>
 
-        <div className="space-y-3 rounded-md border p-3">
+        <div className="space-y-3 rounded-md border bg-card p-3">
           <h3 className="flex items-center gap-2 font-medium">
             Google Ads lead forms <Configured ok={configured.googleAds} />
           </h3>
@@ -80,7 +80,7 @@ export default async function IntegrationsPage() {
           </p>
         </div>
 
-        <div className="space-y-2 rounded-md border p-3">
+        <div className="space-y-2 rounded-md border bg-card p-3">
           <h3 className="flex items-center gap-2 font-medium">
             Email notifications <Configured ok={configured.email} />
           </h3>
@@ -100,7 +100,7 @@ export default async function IntegrationsPage() {
         {!submissions?.length ? (
           <p className="text-muted-foreground">Nothing received yet.</p>
         ) : (
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y rounded-md border bg-card">
             {submissions.map((s) => {
               const payload = (s.payload ?? {}) as Record<string, unknown>;
               const who = [payload.name, payload.first_name, payload.last_name].filter((v) => typeof v === "string" && v).join(" ") || "Unnamed";

@@ -90,7 +90,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         </div>
         <h2 className="min-w-0 flex-1 truncate font-semibold">{title}</h2>
         {/* Month view is desktop only; phones always get the agenda. */}
-        <div className="hidden rounded-md border p-0.5 md:flex" role="group" aria-label="View">
+        <div className="hidden rounded-md border bg-card p-0.5 md:flex" role="group" aria-label="View">
           {(["week", "month"] as const).map((v) => (
             <Link key={v} href={href({ view: v })} aria-current={view === v ? "true" : undefined} className={cn("flex h-8 items-center rounded px-3 capitalize", view === v ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground")}>
               {v}
@@ -138,7 +138,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                     {day === today ? "Today · " : ""}
                     {formatDay(day, "long")}
                   </h3>
-                  <ul className="divide-y overflow-hidden rounded-md border">
+                  <ul className="divide-y overflow-hidden rounded-md border bg-card">
                     {byDay(day).map((item) => (
                       <li key={item.id}>
                         <AppointmentRow item={item} permissions={permissions} users={users} />
@@ -181,7 +181,7 @@ function MonthGrid({
   users: { id: string; name: string }[];
 }) {
   return (
-    <div className="overflow-hidden rounded-md border">
+    <div className="overflow-hidden rounded-md border bg-card">
       <div className="grid grid-cols-7 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="px-2 py-1.5">

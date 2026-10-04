@@ -237,7 +237,7 @@ function WonForm({ deal, onDone }: { deal: MovableDeal; onDone: () => void }) {
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Which estimate did the customer accept?</legend>
             {deal.sentEstimates.map((estimate, index) => (
-              <label key={estimate.id} className="flex min-h-11 items-center gap-3 rounded-md border px-3">
+              <label key={estimate.id} className="flex min-h-11 items-center gap-3 rounded-md border bg-card px-3">
                 <input type="radio" name="estimate_id" value={estimate.id} defaultChecked={index === 0} className="size-4 accent-primary" />
                 <span className="flex-1">{estimate.label}</span>
                 <span className="font-medium tabular">{estimate.total}</span>

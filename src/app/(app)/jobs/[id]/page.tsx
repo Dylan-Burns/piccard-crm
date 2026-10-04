@@ -17,6 +17,7 @@ import { ScheduleJobDialog } from "@/features/jobs/components/schedule-job-dialo
 import { getJob, getJobStaffDetail, listJobNotes, scheduleLabel } from "@/features/jobs/queries";
 import { PERMIT_STATUS_LABELS } from "@/features/jobs/schemas";
 import { todayRange } from "@/features/appointments/queries";
+import { activityActor, activityText } from "@/lib/activity";
 import { requireRole } from "@/lib/auth";
 import { businessDate, formatDate, formatDay, relativeTime } from "@/lib/dates";
 import { WORK_TYPE_LABELS } from "@/lib/deal-status";
@@ -73,11 +74,11 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   };
   const open = job.status !== "completed" && job.status !== "cancelled";
 
-  const timelineItems: TimelineItem[] = (staff?.activities ?? []).map((a) => ({ id: a.id, type: a.type, summary: a.summary, when: relativeTime(a.occurred_at) }));
+  const timelineItems: TimelineItem[] = (staff?.activities ?? []).map((a) => ({ id: a.id, type: a.type, summary: activityText(a), when: relativeTime(a.occurred_at), actor: activityActor(a) }));
 
   return (
     <>
-      <header className="space-y-3 border-b px-4 py-4 md:px-6">
+      <header className="space-y-3 border-b bg-background px-4 py-4 md:px-6">
         <div>
           <Link href="/jobs" className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground md:min-h-0">
             <ChevronLeft className="size-4" aria-hidden />
@@ -127,21 +128,21 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
       <div className="grid gap-6 p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:p-6">
         <div className="space-y-6">
-          <section aria-label="Scope" className="space-y-2">
-            <h2 className="font-semibold">Scope</h2>
+          <section aria-label="Scope" className="panel space-y-2">
+            <h2 className="panel-head font-semibold">Scope</h2>
             <p className="text-xs text-muted-foreground">{WORK_TYPE_LABELS[job.work_type]}</p>
             {job.scope_summary ? <p className="whitespace-pre-wrap">{job.scope_summary}</p> : <p className="text-muted-foreground">No scope written yet.</p>}
             {job.property?.access_notes ? <p>Access: {job.property.access_notes}</p> : null}
           </section>
 
-          <section aria-label="Schedule" className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+          <section aria-label="Schedule" className="panel space-y-2">
+            <div className="panel-head">
               <h2 className="font-semibold">Schedule</h2>
               {isStaff && open ? <ScheduleJobDialog jobId={job.id} jobLabel={label} users={users} defaults={scheduleDefaults} rescheduling={Boolean(job.scheduled_start)} /> : null}
             </div>
             <p>{scheduleLabel(job.scheduled_start, job.scheduled_end) ?? "Not scheduled yet."}</p>
             {workDays.size > 0 ? (
-              <ul className="divide-y rounded-md border">
+              <ul className="divide-y rounded-md border bg-card">
                 {[...workDays].map(([day, entry]) => (
                   <li key={day} className="flex min-h-10 items-center justify-between gap-3 px-3 py-1.5">
                     <span className="tabular">{formatDay(day, "long")}</span>
@@ -154,8 +155,8 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
             {job.completed_at ? <p className="text-muted-foreground">Completed {formatDate(job.completed_at, timeZone)}</p> : null}
           </section>
 
-          <section aria-label="Files" className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
+          <section aria-label="Files" className="panel space-y-3">
+            <div className="panel-head">
               <h2 className="font-semibold">Files</h2>
               <FileUploader
                 target={{ jobId: job.id }}
@@ -172,13 +173,13 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
             <FileGrid files={files} permissions={{ canEdit: isStaff, canDelete: me.role === "admin" }} />
           </section>
 
-          <section aria-label="Notes" className="space-y-3">
-            <h2 className="font-semibold">Notes</h2>
+          <section aria-label="Notes" className="panel space-y-3">
+            <h2 className="panel-head font-semibold">Notes</h2>
             <NoteComposer parent={{ job_id: job.id }} revalidate={path} showShare={isStaff} />
             {notes.length === 0 ? (
               <p className="text-muted-foreground">No notes yet.</p>
             ) : (
-              <ul className="divide-y rounded-md border">
+              <ul className="divide-y rounded-md border bg-card">
                 {notes.map((note) => (
                   <li key={note.id} className="space-y-0.5 p-3">
                     <p className="whitespace-pre-wrap">{note.body}</p>
@@ -193,20 +194,20 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
           </section>
 
           {staff ? (
-            <section aria-label="Timeline" className="space-y-3">
-              <h2 className="font-semibold">Timeline</h2>
+            <section aria-label="Timeline" className="panel space-y-3">
+              <h2 className="panel-head font-semibold">Timeline</h2>
               <Timeline items={timelineItems} />
             </section>
           ) : null}
         </div>
 
         <div className="space-y-6">
-          <section aria-label="Crew" className="space-y-2">
-            <h2 className="font-semibold">Crew</h2>
+          <section aria-label="Crew" className="panel space-y-2">
+            <h2 className="panel-head font-semibold">Crew</h2>
             {isStaff ? (
               <CrewEditor jobId={job.id} crew={crew} users={users} />
             ) : (
-              <ul className="divide-y rounded-md border">
+              <ul className="divide-y rounded-md border bg-card">
                 {crew.map((member) => (
                   <li key={member.id} className="flex min-h-11 items-center px-3">
                     {member.name}
@@ -216,8 +217,8 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
             )}
           </section>
 
-          <section aria-label="Permit and warranty" className="space-y-2">
-            <h2 className="font-semibold">Permit and warranty</h2>
+          <section aria-label="Permit and warranty" className="panel space-y-2">
+            <h2 className="panel-head font-semibold">Permit and warranty</h2>
             {isStaff ? (
               <JobDetailsForm job={{ id: job.id, title: job.title, scope_summary: job.scope_summary, permit_status: job.permit_status, permit_number: job.permit_number, warranty_years: job.warranty_years }} />
             ) : null}
@@ -244,8 +245,8 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
           {staff ? (
             <>
-              <section aria-label="Contract" className="space-y-2">
-                <h2 className="font-semibold">Contract</h2>
+              <section aria-label="Contract" className="panel space-y-2">
+                <h2 className="panel-head font-semibold">Contract</h2>
                 <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
                   <dt className="text-muted-foreground">Amount</dt>
                   <dd className="tabular">{staff.amountCents === null ? "Not set" : formatCents(staff.amountCents)}</dd>
@@ -256,12 +257,12 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                   Open deal
                 </Link>
               </section>
-              <section aria-label="Invoices" className="space-y-2">
-                <h2 className="font-semibold">Invoices</h2>
+              <section aria-label="Invoices" className="panel space-y-2">
+                <h2 className="panel-head font-semibold">Invoices</h2>
                 {staff.invoices.length === 0 ? (
                   <p className="text-muted-foreground">No invoices. They are created from the accepted estimate when a deal is won.</p>
                 ) : (
-                  <ul className="divide-y rounded-md border">
+                  <ul className="divide-y rounded-md border bg-card">
                     {staff.invoices.map((invoice) => (
                       <li key={invoice.id} className="flex min-h-10 items-center justify-between gap-3 px-3 py-1.5">
                         <span>

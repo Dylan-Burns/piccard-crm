@@ -68,6 +68,13 @@ test.describe("deal page tabs", () => {
     await expect(history).toContainText("Gate code 4321");
     await expect(history).toContainText("Left a message about Thursday");
 
+    // A stage change says what it moved from and to, and who moved it
+    await page.getByRole("list", { name: "Stages" }).getByRole("button", { name: "Contacted" }).click();
+    await expect(page.getByRole("list", { name: "Stages" }).getByRole("button", { name: /· Contacted$/ })).toHaveAttribute("aria-current", "step");
+    await chips.getByRole("button", { name: /^Changelog/ }).click();
+    await expect(history).toContainText("Stage changed: New Lead → Contacted");
+    await expect(history.getByRole("listitem").filter({ hasText: "Stage changed" })).toContainText("Sam Sales");
+
     // The other tabs hold their sections
     await tabs.getByRole("tab", { name: "Files" }).click();
     await expect(page.getByRole("region", { name: "Files" }).getByRole("button", { name: "Upload" })).toBeVisible();
