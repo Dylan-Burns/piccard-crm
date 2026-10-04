@@ -180,3 +180,16 @@ One line per decision made where `docs/spec.md` was silent.
 - Send controls live in the builder's totals panel: Send (asks once more, showing the address; disabled while there are unsaved edits), then Copy link, Resend email, and Revise.
 - `/api/cron/nightly` runs `run_nightly_maintenance`, then retries lead submissions and emails; scheduled daily at 08:00 UTC in `vercel.json`.
 - Until `RESEND_API_KEY` and `EMAIL_FROM` are set on a verified sending domain, estimate emails are recorded as failed and the builder says so; the rep copies the link instead. Sending still marks the estimate sent.
+
+## Phase 11 (2026-10-03)
+- Migration is `0017_reports.sql`. The functions are the spec's §8 SQL with names schema-qualified and an empty `search_path` (§2.1); `biz_date` lives in `private` and is executable by signed-in users because the report functions run as the caller. Sums are cast to `bigint` and ties in the ordering are broken by name so output is stable.
+- The functions are `security invoker`: field users get zeros and empty tables because they cannot read deals. The Reports page and the CSV route are admin only; the dashboard is staff only and passes the signed-in rep's id for sales users.
+- Ranges (`features/reports/ranges.ts`): This month, Last month, This quarter, Year to date, Custom. Presets run to the end of their period; an invalid custom range falls back to This month. Days are in the company timezone.
+- Dashboard "Needs attention": unassigned leads (New or Contacted with no owner), overdue open tasks (the rep's own for sales), and open deals with no open task and no future scheduled appointment (the §4.4 invariant, checked live rather than waiting for the nightly job). Each list shows five with a link to the rest.
+- Reports: one shared definition (`features/reports/csv.ts`) produces both the on-screen table and the CSV, so they cannot disagree. CSV cells starting with `=`, `+`, `-`, or `@` are prefixed with an apostrophe so a spreadsheet does not run them as formulas. Pipeline by stage is a snapshot of now and revenue by month covers the last 12 months, regardless of the chosen range; the page says so.
+- Tests use a rep created for the test with deals dated March 2019, so the expected numbers are worked by hand and cannot be disturbed by seed or other test data.
+
+## Planned: linked email accounts (decided 2026-10-03, not yet built)
+- The owner wants what Pipedrive's Email tab has: each user links their own mailbox, and email to and from a customer appears on that customer's deal (full two-way sync), plus sending from the deal's Email tab. Providers: Google Workspace and Microsoft 365.
+- Order agreed with the owner: Phase 11, then Phase 12 (Google Calendar sync, which builds the Google sign-in plumbing), then email linking as its own piece of work.
+- This is beyond the spec, which lists email sync as out of scope for v1. It needs new tables (linked mailboxes with encrypted tokens, synced messages), so the schema additions must be designed and approved before building (CLAUDE.md rule 1). It also needs app registrations only the owner can create: a Google Cloud OAuth client (registered as internal to the Workspace organisation, which avoids Google's review for reading mail) and a Microsoft Entra app registration.

@@ -4,14 +4,17 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 step() { local name="$1"; shift; if out=$("$@" 2>&1); then echo "ok   $name"; else echo "FAIL $name"; echo "$out" | tail -40; exit 1; fi; }
 step "db reset"  supabase db reset
-# The reset restarts the auth service; seeding before it answers fails with a 502.
+# The reset restarts the auth service. Seeding before it answers fails with a 502, and the local
+# gateway can keep routing to auth's old address, so restart the gateway if auth stays unreachable.
 wait_for_auth() {
-  local url; url=$(grep -E '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2- | tr -d '"')
-  for _ in $(seq 1 60); do
-    [ "$(curl -s -o /dev/null -w '%{http_code}' "$url/auth/v1/health")" != "502" ] && return 0
+  local url code; url=$(grep -E '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2- | tr -d '"')
+  for i in $(seq 1 60); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "$url/auth/v1/health")
+    [ "$code" = "200" ] && return 0
+    if [ "$i" = "10" ] || [ "$i" = "30" ]; then docker restart supabase_kong_piccard-crm >/dev/null 2>&1 || true; fi
     sleep 2
   done
-  echo "auth did not come back after the reset"; return 1
+  echo "auth did not come back after the reset (last status $code)"; return 1
 }
 step "services" wait_for_auth
 step "seed"      pnpm -s seed
