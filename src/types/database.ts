@@ -1719,6 +1719,73 @@ export type Database = {
         }
         Returns: Json
       }
+      report_dashboard: {
+        Args: { p_from: string; p_owner?: string; p_to: string }
+        Returns: {
+          active_jobs: number
+          close_rate: number
+          invoiced_cents: number
+          lost_count: number
+          new_leads: number
+          outstanding_cents: number
+          pipeline_cents: number
+          sold_cents: number
+          upcoming_appointments: number
+          won_count: number
+        }[]
+      }
+      report_leads_by_source: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          cohort_conversion: number
+          leads: number
+          lost: number
+          open: number
+          sold_cents: number
+          source: string
+          won: number
+        }[]
+      }
+      report_lost_reasons: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          deals: number
+          reason: Database["public"]["Enums"]["lost_reason"]
+          value_cents: number
+        }[]
+      }
+      report_pipeline_by_stage: {
+        Args: { p_owner?: string }
+        Returns: {
+          avg_days_in_stage: number
+          deals: number
+          stage: Database["public"]["Enums"]["opportunity_stage"]
+          value_cents: number
+        }[]
+      }
+      report_rep_performance: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          avg_days_to_close: number
+          close_rate: number
+          leads_assigned: number
+          lost: number
+          median_minutes_to_first_attempt: number
+          overdue_tasks: number
+          owner_id: string
+          owner_name: string
+          sold_cents: number
+          won: number
+        }[]
+      }
+      report_revenue_by_month: {
+        Args: { p_months?: number }
+        Returns: {
+          month: string
+          sold_cents: number
+          won_count: number
+        }[]
+      }
       reschedule_appointment: {
         Args: {
           p_appointment_id: string
