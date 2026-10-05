@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { currentProfileWithRole } from "@/lib/auth";
 import { resolveOrigin, serverEnv } from "@/lib/env";
 import { encrypt } from "@/lib/integrations/crypto";
-import { exchangeQboCode, getQboCompanyName } from "@/lib/integrations/quickbooks";
+import { exchangeQboCode, getQboCompanyName, linkedToOtherCompany } from "@/lib/integrations/quickbooks";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -29,6 +29,8 @@ export async function GET(request: Request) {
   const realmId = query.get("realmId");
   if (query.get("error")) return done("cancelled");
   if (!expected || !state || !code || !realmId || !/^\d{1,30}$/.test(realmId) || !same(state, expected)) return done("error");
+  // Saved QuickBooks ids are only valid in the company they came from.
+  if (await linkedToOtherCompany(realmId)) return done("different_company");
 
   try {
     const tokens = await exchangeQboCode(code, `${origin}/api/integrations/quickbooks/callback`);

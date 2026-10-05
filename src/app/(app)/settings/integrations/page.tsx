@@ -42,6 +42,7 @@ const QBO_NOTICE: Record<string, { tone: "ok" | "bad"; text: string }> = {
   connected: { tone: "ok", text: "QuickBooks is connected. Choose the income item below before sending invoices." },
   cancelled: { tone: "bad", text: "QuickBooks sign-in was cancelled. Nothing changed." },
   error: { tone: "bad", text: "QuickBooks sign-in did not finish. Try again." },
+  different_company: { tone: "bad", text: "That is a different QuickBooks company from the one this CRM has already sent customers or invoices to, so it was not connected. Nothing changed." },
   not_configured: { tone: "bad", text: "QuickBooks is not set up yet: add QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT, and INTEGRATION_ENCRYPTION_KEY in the Vercel project settings." },
 };
 

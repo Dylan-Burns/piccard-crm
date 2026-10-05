@@ -48,6 +48,23 @@ async function tokenRequest(params: Record<string, string>, fetchImpl: Fetch) {
 
 export const exchangeQboCode = (code: string, redirectUri: string, fetchImpl: Fetch = fetch) => tokenRequest({ grant_type: "authorization_code", code, redirect_uri: redirectUri }, fetchImpl);
 
+/**
+ * The ids saved from QuickBooks (customer links, sent invoices) belong to one company. Connecting
+ * a different company while any exist would send invoices to, and read payments from, whatever
+ * has the same ids there, so the callback refuses it. The company id is kept on disconnect.
+ */
+export async function linkedToOtherCompany(realmId: string, db: Db = createAdminClient()): Promise<boolean> {
+  const { data: existing } = await db.from("integration_connections").select("external_account_id").eq("provider", "quickbooks").maybeSingle();
+  if (!existing?.external_account_id || existing.external_account_id === realmId) return false;
+  const [linkedCustomers, sentInvoices] = await Promise.all([
+    db.from("customers").select("id", { count: "exact", head: true }).not("qbo_customer_id", "is", null),
+    db.from("invoices").select("id", { count: "exact", head: true }).not("qbo_invoice_id", "is", null),
+  ]);
+  // If it cannot be checked, assume there are links.
+  if (linkedCustomers.error || sentInvoices.error) return true;
+  return (linkedCustomers.count ?? 0) + (sentInvoices.count ?? 0) > 0;
+}
+
 async function markConnectionError(db: Db, message: string) {
   await db.from("integration_connections").update({ status: "error", last_error: message.slice(0, 500) }).eq("provider", "quickbooks");
 }

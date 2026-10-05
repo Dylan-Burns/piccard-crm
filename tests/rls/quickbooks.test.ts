@@ -9,7 +9,7 @@ process.env.QBO_CLIENT_SECRET ??= "test-qbo-secret";
 import { BUCKET } from "@/features/files/categories";
 import { decrypt, encrypt } from "@/lib/integrations/crypto";
 import { processOutbox } from "@/lib/integrations/outbox";
-import { pullPayments, type Fetch } from "@/lib/integrations/quickbooks";
+import { linkedToOtherCompany, pullPayments, type Fetch } from "@/lib/integrations/quickbooks";
 import type { Json } from "@/types/database";
 import { serviceClient, signInAs, type Client } from "./helpers";
 
@@ -242,5 +242,17 @@ describe("the connection", () => {
     expect(posts("/invoice")).toHaveLength(0);
     // Nothing was lost: the invoice is still a draft that has not reached QuickBooks.
     expect(await invoice(deposit)).toMatchObject({ status: "draft", qbo_invoice_id: null });
+  });
+});
+
+describe("connecting a different company", () => {
+  it("is refused while customers or invoices are linked to the current one, and allowed for the same company", async () => {
+    const { customerId } = await jobWithInvoices();
+    await service.from("customers").update({ qbo_customer_id: "C-1" }).eq("id", customerId);
+    expect(await linkedToOtherCompany("realm-9")).toBe(false);
+    expect(await linkedToOtherCompany("realm-10")).toBe(true);
+    // The company id survives a disconnect, so the rule still holds afterwards.
+    await connect({ status: "disconnected", access_token_enc: null, refresh_token_enc: null });
+    expect(await linkedToOtherCompany("realm-10")).toBe(true);
   });
 });
