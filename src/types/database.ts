@@ -1786,6 +1786,14 @@ export type Database = {
         Args: { p_ip?: string; p_name: string; p_token: string }
         Returns: Json
       }
+      apply_invoice_payment: {
+        Args: {
+          p_amount_paid_cents: number
+          p_invoice_id: string
+          p_missing?: boolean
+        }
+        Returns: string
+      }
       assign_owner: {
         Args: { p_opportunity_id: string; p_owner_id: string }
         Returns: Json
@@ -1832,6 +1840,16 @@ export type Database = {
         }
         Returns: Json
       }
+      complete_invoice_sync: {
+        Args: {
+          p_doc_number: string
+          p_invoice_id: string
+          p_qbo_customer_id?: string
+          p_qbo_invoice_id: string
+          p_warning?: string
+        }
+        Returns: undefined
+      }
       complete_outbox: { Args: { p_id: string }; Returns: undefined }
       create_estimate: {
         Args: { p_opportunity_id: string; p_title?: string }
@@ -1848,7 +1866,12 @@ export type Database = {
         Returns: number
       }
       fail_outbox: {
-        Args: { p_error: string; p_hold?: boolean; p_id: string }
+        Args: {
+          p_error: string
+          p_fatal?: boolean
+          p_hold?: boolean
+          p_id: string
+        }
         Returns: string
       }
       lock_integration: {
@@ -1896,8 +1919,18 @@ export type Database = {
         Args: { p_lead: Json; p_submission_id: string }
         Returns: Json
       }
+      queue_invoice_sync: { Args: { p_invoice_id: string }; Returns: Json }
       record_email_message: { Args: { p: Json }; Returns: Json }
       record_estimate_view: { Args: { p_token: string }; Returns: Json }
+      record_invoice_manually: {
+        Args: {
+          p_amount_paid_cents?: number
+          p_invoice_id: string
+          p_status?: Database["public"]["Enums"]["invoice_status"]
+        }
+        Returns: Json
+      }
+      regenerate_job_invoices: { Args: { p_job_id: string }; Returns: Json }
       register_files: { Args: { p: Json }; Returns: Json }
       reopen_opportunity: {
         Args: {
@@ -2031,6 +2064,7 @@ export type Database = {
         Returns: undefined
       }
       void_estimate: { Args: { p_estimate_id: string }; Returns: Json }
+      void_invoice: { Args: { p_invoice_id: string }; Returns: Json }
     }
     Enums: {
       activity_type:

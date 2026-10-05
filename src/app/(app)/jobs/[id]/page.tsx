@@ -9,6 +9,8 @@ import { CATEGORY_ORDER, FIELD_CATEGORIES } from "@/features/files/categories";
 import { FileGrid } from "@/features/files/components/file-grid";
 import { FileUploader } from "@/features/files/components/file-uploader";
 import { listFiles } from "@/features/files/queries";
+import { InvoicesPanel } from "@/features/invoices/components/invoices-panel";
+import { quickbooksReadyForInvoices } from "@/features/invoices/queries";
 import { CrewEditor } from "@/features/jobs/components/crew-panel";
 import { JobDetailsForm } from "@/features/jobs/components/job-details-form";
 import { JobStatusBadge } from "@/features/jobs/components/job-status-badge";
@@ -27,7 +29,6 @@ import { getTimeZone, listUserOptions } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Job" };
 
-const INVOICE_STATUS_LABELS = { draft: "Draft", sent: "Sent", partially_paid: "Partially paid", paid: "Paid", void: "Void" } as const;
 
 /**
  * Job record (spec §5.6). Field users see scope, schedule, crew, permit, files, and notes; the
@@ -41,6 +42,8 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const [job, timeZone] = await Promise.all([getJob(id), getTimeZone()]);
   if (!job) notFound();
 
+  // Whether "Send to QuickBooks" is offered: only admins send, so only they are asked.
+  const quickbooksReady = me.role === "admin" ? await quickbooksReadyForInvoices() : false;
   const [files, notes, users, staff] = await Promise.all([
     listFiles(me, { opportunityId: job.opportunity_id }),
     listJobNotes(job.opportunity_id),
@@ -257,23 +260,27 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                   Open deal
                 </Link>
               </section>
-              <section aria-label="Invoices" className="panel space-y-2">
+              <section aria-label="Invoices" className="panel space-y-3">
                 <h2 className="panel-head font-semibold">Invoices</h2>
-                {staff.invoices.length === 0 ? (
-                  <p className="text-muted-foreground">No invoices. They are created from the accepted estimate when a deal is won.</p>
-                ) : (
-                  <ul className="divide-y rounded-md border bg-card">
-                    {staff.invoices.map((invoice) => (
-                      <li key={invoice.id} className="flex min-h-10 items-center justify-between gap-3 px-3 py-1.5">
-                        <span>
-                          <span className="tabular">INV-{invoice.invoice_number}</span> · {invoice.kind === "deposit" ? "Deposit" : "Final"}
-                          <span className="text-muted-foreground"> · {INVOICE_STATUS_LABELS[invoice.status]}</span>
-                        </span>
-                        <span className="tabular">{formatCents(invoice.total_cents)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <InvoicesPanel
+                  jobId={job.id}
+                  isAdmin={me.role === "admin"}
+                  quickbooksReady={quickbooksReady}
+                  hasEstimate={Boolean(job.accepted_estimate_id)}
+                  invoices={staff.invoices.map((invoice) => ({
+                    id: invoice.id,
+                    label: `INV-${invoice.invoice_number}`,
+                    kind: invoice.kind,
+                    status: invoice.status,
+                    total: formatCents(invoice.total_cents, { alwaysCents: true }),
+                    paid: formatCents(invoice.amount_paid_cents, { alwaysCents: true }),
+                    paidInput: (invoice.amount_paid_cents / 100).toFixed(2),
+                    dueOn: invoice.due_on ?? "",
+                    sync: invoice.qbo_sync_status,
+                    syncError: invoice.qbo_sync_error,
+                    qboNumber: invoice.qbo_doc_number,
+                  }))}
+                />
               </section>
             </>
           ) : null}

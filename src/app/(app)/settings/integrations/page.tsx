@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { CopyLink } from "@/components/shared/copy-link";
 import { emailProviderReady } from "@/features/email/providers";
 import { GoogleCalendarControls, RetrySyncButton } from "@/features/settings/components/google-calendar-controls";
+import { QuickBooksControls, RetryInvoiceButton } from "@/features/settings/components/quickbooks-controls";
 import { LeadIngestionControls, RetrySubmissionButton } from "@/features/settings/components/lead-ingestion-controls";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime, relativeTime } from "@/lib/dates";
 import { appUrl, serverEnv } from "@/lib/env";
 import { getTimeZone } from "@/lib/settings";
+import { listQboOptions } from "@/lib/integrations/quickbooks";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
@@ -36,6 +38,13 @@ const GOOGLE_NOTICE: Record<string, { tone: "ok" | "bad"; text: string }> = {
   not_configured: { tone: "bad", text: "Google is not set up yet: add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and INTEGRATION_ENCRYPTION_KEY in the Vercel project settings." },
 };
 
+const QBO_NOTICE: Record<string, { tone: "ok" | "bad"; text: string }> = {
+  connected: { tone: "ok", text: "QuickBooks is connected. Choose the income item below before sending invoices." },
+  cancelled: { tone: "bad", text: "QuickBooks sign-in was cancelled. Nothing changed." },
+  error: { tone: "bad", text: "QuickBooks sign-in did not finish. Try again." },
+  not_configured: { tone: "bad", text: "QuickBooks is not set up yet: add QBO_CLIENT_ID, QBO_CLIENT_SECRET, QBO_ENVIRONMENT, and INTEGRATION_ENCRYPTION_KEY in the Vercel project settings." },
+};
+
 export default async function IntegrationsPage({ searchParams }: PageProps<"/settings/integrations">) {
   await requireRole("admin");
   const params = await searchParams;
@@ -56,6 +65,16 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/set
     admin.from("appointments").select("id, title, starts_at, google_sync_error, opportunity_id").eq("google_sync_status", "error").order("starts_at").limit(50),
     admin.from("sync_outbox").select("id", { count: "exact", head: true }).eq("provider", "google_calendar").eq("status", "pending"),
   ]);
+  const [{ data: qbo }, { data: invoiceIssues }] = await Promise.all([
+    admin.from("integration_connections").select("status, external_account_id, config, last_error").eq("provider", "quickbooks").maybeSingle(),
+    admin.from("invoices").select("id, invoice_number, qbo_sync_error, job_id").eq("qbo_sync_status", "error").order("invoice_number").limit(50),
+  ]);
+  const qboReady = Boolean(env.QBO_CLIENT_ID && env.QBO_CLIENT_SECRET && env.INTEGRATION_ENCRYPTION_KEY);
+  const qboConnected = qbo?.status === "connected" || qbo?.status === "error";
+  const qboConfig = (qbo?.config ?? {}) as { environment?: string; company_name?: string; item_id?: string; item_name?: string; tax_code_id?: string | null };
+  // Live lists from QuickBooks for the pickers; if it cannot be reached the card says so.
+  const qboOptions = qbo?.status === "connected" ? await listQboOptions().catch(() => null) : null;
+  const quickbooksNotice = typeof params.quickbooks === "string" ? QBO_NOTICE[params.quickbooks] : undefined;
   const emailReady = { google: emailProviderReady("google"), microsoft: emailProviderReady("microsoft") };
   const { count: linkedMailboxes } = await admin.from("email_accounts").select("id", { count: "exact", head: true }).eq("status", "connected");
   const googleReady = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.INTEGRATION_ENCRYPTION_KEY);
@@ -137,6 +156,67 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/set
         </div>
       </section>
 
+      <section aria-label="QuickBooks" className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">QuickBooks Online</h2>
+          <p className="text-muted-foreground">
+            An admin sends an invoice to QuickBooks with one click from the job; payment status comes back here. Nothing is sent automatically. Without QuickBooks, invoices are marked sent and paid by hand on the job.
+          </p>
+        </div>
+        {quickbooksNotice ? (
+          <p role="status" className={cn("rounded-md border p-3", quickbooksNotice.tone === "ok" ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive")}>
+            {quickbooksNotice.text}
+          </p>
+        ) : null}
+        <div className="space-y-3 rounded-md border bg-card p-3">
+          <h3 className="flex items-center gap-2 font-medium">
+            Connection
+            <span className={cn("rounded px-1.5 text-xs font-medium", qbo?.status === "connected" ? "bg-success/10 text-success" : qbo?.status === "error" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
+              {qbo?.status === "connected" ? "Connected" : qbo?.status === "error" ? "Needs reconnecting" : "Not connected"}
+            </span>
+          </h3>
+          {qboConnected ? (
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+              <dt className="text-muted-foreground">Company</dt>
+              <dd className="truncate">{qboConfig.company_name ?? qbo?.external_account_id}</dd>
+              <dt className="text-muted-foreground">Environment</dt>
+              <dd>{qboConfig.environment === "production" ? "Production" : "Sandbox (test company)"}</dd>
+              <dt className="text-muted-foreground">Income item</dt>
+              <dd>{qboConfig.item_name ?? "Not chosen yet"}</dd>
+            </dl>
+          ) : null}
+          {qbo?.status === "error" && qbo.last_error ? <p className="text-destructive">{qbo.last_error}</p> : null}
+          {qbo?.status === "connected" && !qboOptions ? <p className="text-destructive">QuickBooks could not be reached to load its items. Reload this page to try again.</p> : null}
+          {qboReady ? (
+            <QuickBooksControls connected={qboConnected} options={qboOptions} itemId={qboConfig.item_id ?? ""} taxCodeId={qboConfig.tax_code_id ?? ""} />
+          ) : (
+            <>
+              <p className="text-muted-foreground">
+                Not set up yet: create an app in the Intuit developer portal and add <code className="rounded bg-muted px-1">QBO_CLIENT_ID</code>, <code className="rounded bg-muted px-1">QBO_CLIENT_SECRET</code>,{" "}
+                <code className="rounded bg-muted px-1">QBO_ENVIRONMENT</code> (sandbox or production) and <code className="rounded bg-muted px-1">INTEGRATION_ENCRYPTION_KEY</code> in the Vercel project settings. Register this redirect address:
+              </p>
+              <CopyLink link={`${base}/api/integrations/quickbooks/callback`} label="QuickBooks redirect URI" />
+            </>
+          )}
+        </div>
+        {invoiceIssues?.length ? (
+          <div className="space-y-2">
+            <h3 className="font-medium">Invoice sync issues</h3>
+            <ul className="divide-y rounded-md border bg-card">
+              {invoiceIssues.map((issue) => (
+                <li key={issue.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium tabular">INV-{issue.invoice_number}</p>
+                    <p className="truncate text-xs text-muted-foreground">{issue.qbo_sync_error ?? "Unknown error"}</p>
+                  </div>
+                  <RetryInvoiceButton invoiceId={issue.id} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+
       <section aria-label="Email accounts" className="space-y-4">
         <div>
           <h2 className="text-base font-semibold">Email accounts</h2>
@@ -162,7 +242,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/set
           <p className="text-muted-foreground">
             Create an app registration in Microsoft Entra with delegated permissions <code className="rounded bg-muted px-1">Mail.Read</code>, <code className="rounded bg-muted px-1">Mail.Send</code>,{" "}
             <code className="rounded bg-muted px-1">User.Read</code> and <code className="rounded bg-muted px-1">offline_access</code>, then add <code className="rounded bg-muted px-1">MICROSOFT_CLIENT_ID</code>,{" "}
-            <code className="rounded bg-muted px-1">MICROSOFT_CLIENT_SECRET</code> and (to limit sign-in to your organisation) <code className="rounded bg-muted px-1">MICROSOFT_TENANT_ID</code> in the Vercel project settings. Register this
+            <code className="rounded bg-muted px-1">MICROSOFT_CLIENT_SECRET</code> and <code className="rounded bg-muted px-1">MICROSOFT_TENANT_ID</code> (your organisation&apos;s tenant id; sign-in is limited to it) in the Vercel project settings. Register it as a single-tenant app. Register this
             redirect address (type Web):
           </p>
           <CopyLink link={`${base}/api/integrations/email/microsoft/callback`} label="Microsoft email redirect URI" />

@@ -6,9 +6,10 @@ process.env.GOOGLE_CLIENT_ID ??= "test-client-id";
 process.env.GOOGLE_CLIENT_SECRET ??= "test-client-secret";
 process.env.MICROSOFT_CLIENT_ID ??= "test-ms-client";
 process.env.MICROSOFT_CLIENT_SECRET ??= "test-ms-secret";
+process.env.MICROSOFT_TENANT_ID ??= "11111111-2222-4333-8444-555555555555";
 
 import { decrypt, encrypt } from "@/lib/integrations/crypto";
-import { sendFromMailbox, syncAccount } from "@/lib/integrations/email/mailbox";
+import { PROVIDERS, sendFromMailbox, syncAccount } from "@/lib/integrations/email/mailbox";
 import type { Fetch } from "@/lib/integrations/email/types";
 import type { Json } from "@/types/database";
 import { PERMISSION_DENIED, serviceClient, signInAs, type Client } from "./helpers";
@@ -226,7 +227,7 @@ describe("Microsoft 365", () => {
     // The admin does not own this deal, so this is the explicit "Check for new email" path.
     expect(await syncAccount(account.id, { customerEmail: CUSTOMER, fetchImpl: graph })).toEqual({ checked: 1, stored: 1 });
 
-    expect(calls[0]!.url).toContain("login.microsoftonline.com/organizations/oauth2/v2.0/token");
+    expect(calls[0]!.url).toContain("login.microsoftonline.com/11111111-2222-4333-8444-555555555555/oauth2/v2.0/token"); // the company's own tenant only
     expect(calls[0]!.body).toMatchObject({ grant_type: "refresh_token", refresh_token: "refresh-1" });
     const after = await accountOf(adminId);
     expect(decrypt(after.access_token_enc!)).toBe("ms-access-2");
@@ -256,6 +257,32 @@ describe("Microsoft 365", () => {
     const account = await accountOf(salesId);
     expect(await syncAccount(account.id, { fetchImpl: fake((c) => (c.url.includes("/messages?") ? { body: { messages: [{ id: "g-copy" }] } } : { body: copy })) })).toMatchObject({ checked: 1, stored: 0 });
     expect(await messages()).toHaveLength(before);
+  });
+});
+
+describe("which address a sign-in proves", () => {
+  const idToken = (claims: Record<string, unknown>) => `x.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.y`;
+
+  it("Microsoft: the verified primary address is used, never the free-text mail attribute, and only the company's tenant can sign in", async () => {
+    const graph = fake((call) =>
+      call.url.includes("/token") ? { body: { access_token: "a", refresh_token: "r", expires_in: 3600 } } : { body: { mail: "ceo@roofco.example", userPrincipalName: "mallory@attacker.example", proxyAddresses: ["smtp:alias@attacker.example", "SMTP:Mallory@Attacker.example"] } },
+    );
+    const result = await PROVIDERS.microsoft.exchange("code", "https://app.example/callback", graph);
+    expect(result.email).toBe("mallory@attacker.example"); // not the spoofed "ceo@roofco.example"
+    expect(decodeURIComponent(calls[1]!.url)).not.toMatch(/\$select=[^&]*\bmail\b/);
+    expect(PROVIDERS.microsoft.authUrl("https://app.example/callback", "s")).toContain("/11111111-2222-4333-8444-555555555555/oauth2/v2.0/authorize");
+
+    const noAddress = fake((call) => (call.url.includes("/token") ? { body: { access_token: "a", refresh_token: "r" } } : { body: { mail: "ceo@roofco.example" } }));
+    await expect(PROVIDERS.microsoft.exchange("code", "https://app.example/callback", noAddress)).rejects.toThrow(/which mailbox/);
+  });
+
+  it("Google: the address comes from the mailbox itself and must be verified and agree with the sign-in", async () => {
+    const google = (claims: Record<string, unknown>, profileEmail: string) =>
+      fake((call) => (call.url.includes("oauth2.googleapis.com") ? { body: { access_token: "a", refresh_token: "r", expires_in: 3600, id_token: idToken(claims) } } : { body: { emailAddress: profileEmail } }));
+    expect((await PROVIDERS.google.exchange("code", "https://app.example/callback", google({ email: "Sam@Roofco.example", email_verified: true }, "sam@roofco.example"))).email).toBe("sam@roofco.example");
+    await expect(PROVIDERS.google.exchange("code", "u", google({ email: "sam@roofco.example", email_verified: false }, "sam@roofco.example"))).rejects.toThrow(/could not confirm/);
+    await expect(PROVIDERS.google.exchange("code", "u", google({ email: "ceo@roofco.example", email_verified: true }, "sam@roofco.example"))).rejects.toThrow(/could not confirm/);
+    await expect(PROVIDERS.google.exchange("code", "u", google({}, "sam@roofco.example"))).rejects.toThrow(/could not confirm/);
   });
 });
 

@@ -105,15 +105,19 @@ export const gmail: MailProvider = {
 
   async exchange(code, redirectUri, fetchImpl) {
     const tokens = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: redirectUri }, fetchImpl);
-    let email = "";
+    // Which mailbox is this? Ask Gmail itself for the address of the mailbox these tokens open,
+    // rather than trusting a claim: that is the address its mail is actually sent from.
+    const email = ((await api<{ emailAddress?: string }>(fetchImpl, tokens.access_token, "/profile")).emailAddress ?? "").trim().toLowerCase();
+    if (!isPlainEmail(email)) throw new MailboxError("Google did not say which mailbox this is");
+    // The id token must agree and must mark the address verified.
+    let claims: { email?: string; email_verified?: boolean } = {};
     try {
-      email = (JSON.parse(Buffer.from(tokens.id_token!.split(".")[1]!, "base64url").toString("utf8")) as { email?: string }).email ?? "";
+      claims = JSON.parse(Buffer.from(tokens.id_token!.split(".")[1]!, "base64url").toString("utf8"));
     } catch {
-      // handled below
+      // treated as unverified below
     }
-    if (!email) email = (await api<{ emailAddress?: string }>(fetchImpl, tokens.access_token, "/profile")).emailAddress ?? "";
-    if (!email) throw new MailboxError("Google did not say which mailbox this is");
-    return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresIn: tokens.expires_in ?? 3600, email: email.toLowerCase() };
+    if (claims.email?.toLowerCase() !== email || claims.email_verified !== true) throw new MailboxError("Google could not confirm this mailbox's address");
+    return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresIn: tokens.expires_in ?? 3600, email };
   },
 
   async refresh(refreshToken, fetchImpl): Promise<Tokens> {

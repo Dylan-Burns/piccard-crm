@@ -72,7 +72,7 @@ export async function getJob(id: string) {
     .from("jobs")
     .select(
       `id, job_number, title, work_type, status, scheduled_start, scheduled_end, started_at, completed_at,
-       permit_status, permit_number, warranty_years, warranty_expires_on, scope_summary, opportunity_id, customer_id,
+       permit_status, permit_number, warranty_years, warranty_expires_on, scope_summary, opportunity_id, customer_id, accepted_estimate_id,
        customer:customers!inner(first_name, last_name, phone, phone_e164),
        property:properties(address_line1, city, state, postal_code, access_notes),
        job_assignments(user_id, user:profiles(full_name, role)),
@@ -103,7 +103,7 @@ export async function getJobStaffDetail(jobId: string, opportunityId: string) {
   const supabase = await createClient();
   const [deal, invoices, activities] = await Promise.all([
     supabase.from("opportunities").select("amount_cents, owner:profiles!opportunities_owner_id_fkey(full_name)").eq("id", opportunityId).maybeSingle(),
-    supabase.from("invoices").select("id, invoice_number, kind, status, total_cents, due_on").eq("job_id", jobId).order("invoice_number"),
+    supabase.from("invoices").select("id, invoice_number, kind, status, total_cents, amount_paid_cents, due_on, qbo_sync_status, qbo_sync_error, qbo_doc_number").eq("job_id", jobId).order("invoice_number"),
     supabase.from("activities").select("id, type, summary, metadata, occurred_at, actor:profiles(full_name)").eq("opportunity_id", opportunityId).order("occurred_at", { ascending: false }).limit(30),
   ]);
   return { amountCents: deal.data?.amount_cents ?? null, owner: deal.data?.owner?.full_name ?? null, invoices: invoices.data ?? [], activities: activities.data ?? [] };

@@ -1,6 +1,6 @@
 import "server-only";
 import { serverEnv } from "@/lib/env";
-import { htmlToText, MailboxError, oneLine, type Fetch, type MailMessage, type MailProvider, type Tokens } from "@/lib/integrations/email/types";
+import { htmlToText, isPlainEmail, MailboxError, oneLine, type Fetch, type MailMessage, type MailProvider, type Tokens } from "@/lib/integrations/email/types";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const SCOPES = "offline_access openid email User.Read Mail.Read Mail.Send";
@@ -25,9 +25,11 @@ type GraphMessage = {
 
 function config() {
   const env = serverEnv();
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) throw new MailboxError("Microsoft sign-in is not set up");
-  // "organizations" accepts any work or school account; a tenant id limits it to one company.
-  return { clientId: env.MICROSOFT_CLIENT_ID, clientSecret: env.MICROSOFT_CLIENT_SECRET, authority: `https://login.microsoftonline.com/${env.MICROSOFT_TENANT_ID ?? "organizations"}/oauth2/v2.0` };
+  // The tenant id is required: sign-in is limited to the company's own Microsoft organisation.
+  // Accepting any organisation would let someone with their own tenant present whatever address they like.
+  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET || !env.MICROSOFT_TENANT_ID) throw new MailboxError("Microsoft sign-in is not set up");
+  if (!/^[0-9a-f-]{36}$/i.test(env.MICROSOFT_TENANT_ID)) throw new MailboxError("MICROSOFT_TENANT_ID must be the organisation's tenant id (a GUID)");
+  return { clientId: env.MICROSOFT_CLIENT_ID, clientSecret: env.MICROSOFT_CLIENT_SECRET, authority: `https://login.microsoftonline.com/${env.MICROSOFT_TENANT_ID}/oauth2/v2.0` };
 }
 
 async function tokenRequest(params: Record<string, string>, fetchImpl: Fetch) {
@@ -93,9 +95,13 @@ export const microsoft: MailProvider = {
 
   async exchange(code, redirectUri, fetchImpl) {
     const tokens = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: redirectUri }, fetchImpl);
-    const me = await graph<{ mail?: string; userPrincipalName?: string }>(fetchImpl, tokens.access_token, "/me?$select=mail,userPrincipalName");
-    const email = (me.mail ?? me.userPrincipalName ?? "").toLowerCase();
-    if (!email.includes("@")) throw new MailboxError("Microsoft did not say which mailbox this is");
+    // Which mailbox is this? Not the `mail` attribute: an administrator can set that to any text.
+    // The primary entry in proxyAddresses ("SMTP:" in capitals) and the sign-in name are both
+    // restricted to domains the organisation has verified.
+    const me = await graph<{ userPrincipalName?: string; proxyAddresses?: string[] }>(fetchImpl, tokens.access_token, "/me?$select=userPrincipalName,proxyAddresses");
+    const primary = (me.proxyAddresses ?? []).find((a) => a.startsWith("SMTP:"))?.slice(5);
+    const email = (primary ?? me.userPrincipalName ?? "").trim().toLowerCase();
+    if (!isPlainEmail(email)) throw new MailboxError("Microsoft did not say which mailbox this is");
     return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresIn: tokens.expires_in ?? 3600, email };
   },
 

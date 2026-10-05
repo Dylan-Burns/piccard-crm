@@ -3,6 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { WORK_TYPE_LABELS } from "@/lib/deal-status";
 import { appUrl, serverEnv } from "@/lib/env";
 import { decrypt, encrypt } from "@/lib/integrations/crypto";
+import { ConnectionError, RetryableError } from "@/lib/integrations/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database";
 
@@ -19,10 +20,7 @@ export const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar openid em
 export type Fetch = typeof fetch;
 type Db = ReturnType<typeof createAdminClient>;
 
-/** The connection itself is broken (revoked, expired): hold the queue and tell an admin. */
-export class ConnectionError extends Error {}
-/** Worth trying again later (rate limit, server error, network). */
-export class RetryableError extends Error {}
+export { ConnectionError, RetryableError };
 
 const TYPE_LABELS: Record<Database["public"]["Enums"]["appointment_type"], string> = {
   inspection: "Inspection",
